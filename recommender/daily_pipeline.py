@@ -5,17 +5,16 @@ import requests
 import psycopg2
 import numpy as np
 import faiss
-from dotenv import load_dotenv
 from sentence_transformers import SentenceTransformer
 from psycopg2.extras import execute_values
 from pgvector.psycopg2 import register_vector
-from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from recommender.config import DB_CONFIG, ARTIFACTS_DIR
+from recommender.text_builder import build_structured_text as _build_text
 
 # ============================================================
 # -------------------- ENV CONFIG ----------------------------
 # ============================================================
-
-load_dotenv()
 
 # API key rotation — fallback style
 RAWG_API_KEYS = [
@@ -31,16 +30,6 @@ RAWG_API_KEYS = [
 RAWG_API_KEYS    = [k for k in RAWG_API_KEYS if k]  # remove None if fewer than 8 set
 current_key_index = 0
 
-DB_CONFIG = {
-    "dbname":   os.getenv("DB_NAME"),
-    "user":     os.getenv("DB_USER"),
-    "password": os.getenv("DB_PASSWORD"),
-    "host":     os.getenv("DB_HOST"),
-    "port":     os.getenv("DB_PORT"),
-}
-
-BASE_DIR         = Path(__file__).resolve().parent
-ARTIFACTS_DIR    = BASE_DIR / "artifacts"
 FAISS_INDEX_PATH = ARTIFACTS_DIR / "faiss_index.ivf"
 CHECKPOINT_PATH  = ARTIFACTS_DIR / "checkpoint.txt"
 
@@ -103,8 +92,6 @@ def extract_platforms(field):
 # ============================================================
 # -------------------- TEXT BUILD ----------------------------
 # ============================================================
-# Must be IDENTICAL to build_structured_text() in query_faiss.py
-# New game embeddings must match existing index embedding space
 
 def build_structured_text(g: dict) -> str:
     name        = clean_text(g.get("name")) or ""
@@ -115,15 +102,7 @@ def build_structured_text(g: dict) -> str:
     publishers  = ", ".join(extract_names(g.get("publishers")))
     description = (g.get("description_raw") or "")[:800]
 
-    text = (
-        f"CORE IDENTITY: This game is {name}, an {genres} title. "
-        f"GAMEPLAY MECHANICS: {genres} gameplay involving {tags}. "
-        f"NARRATIVE THEME: The setting and story involve {description}. "
-        f"AUDIENCE: Rated {esrb} by ESRB. "
-        f"STUDIO: Developed by {developers}, published by {publishers}."
-    )
-
-    return f"Represent this game for retrieving similar gameplay experiences: {text}"
+    return _build_text(name, genres, tags, esrb, developers, publishers, description)
 
 # ============================================================
 # -------------------- CHECKPOINT ----------------------------
@@ -282,6 +261,8 @@ def update_faiss(new_ids: list, new_vectors: list):
 # -------------------- MAIN DAILY PIPELINE -------------------
 # ============================================================
 
+CHUNK_SIZE = 50
+
 def run_daily_pipeline():
 
     print("Starting daily pipeline...")
@@ -300,76 +281,103 @@ def run_daily_pipeline():
 
     print(f"Found {len(new_ids)} new games")
 
-    game_rows      = []
-    embedding_rows = []
-    faiss_vectors  = []
-    faiss_ids      = []
+    ordered_ids = list(reversed(new_ids))  # oldest first
 
-    for gid in reversed(new_ids):  # oldest first
+    # -------- Parallel fetch all game details --------
+    games = {}
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        future_to_id = {
+            executor.submit(fetch_game_details, gid): gid
+            for gid in ordered_ids
+        }
+        for future in as_completed(future_to_id):
+            gid = future_to_id[future]
+            result = future.result()
+            if result:
+                games[gid] = result
+            else:
+                print(f"Skipped game {gid} (fetch failed)")
 
-        g = fetch_game_details(gid)
+    print(f"Fetched {len(games)} game details")
 
-        if not g:
-            continue
+    # -------- Process in chunks --------
+    valid_ids = [gid for gid in ordered_ids if gid in games]
 
-        # -------- Game row --------
-        game_rows.append((
-            clean_int(g.get("id")),
-            clean_text(g.get("slug")),
-            clean_text(g.get("name")),
-            clean_text(g.get("name_original")),
-            clean_text(g.get("description")),
-            clean_text(g.get("description_raw")),
-            clean_text(g.get("released")),
-            clean_text(g.get("background_image")),
-            clean_text(g.get("background_image_additional")),
-            clean_int(g.get("suggestions_count")),
-            extract_platforms(g.get("platforms")),
-            extract_names(g.get("developers")),
-            extract_names(g.get("publishers")),
-            extract_names(g.get("genres")),
-            extract_names(g.get("tags")),
-            json.dumps(g.get("esrb_rating")) if g.get("esrb_rating") else None,
-            clean_text(g.get("website")),
-            clean_int(g.get("screenshots_count")),
-            clean_int(g.get("achievements_count")),
-            clean_int(g.get("game_series_count")),
-            clean_int(g.get("additions_count")),
-            clean_int(g.get("parents_count")),
-            extract_names(g.get("alternative_names")),
-            g.get("rating") or 0.0,
-            clean_int(g.get("ratings_count")),
-            clean_int(g.get("metacritic")),
-        ))
+    all_faiss_ids     = []
+    all_faiss_vectors = []
 
-        # -------- Embedding --------
-        # build_structured_text must match query_faiss.py exactly
-        text      = build_structured_text(g)
-        embedding = model.encode(
-            text,
+    for i in range(0, len(valid_ids), CHUNK_SIZE):
+        chunk_ids = valid_ids[i:i + CHUNK_SIZE]
+
+        game_rows      = []
+        texts          = []
+        chunk_game_ids = []
+
+        for gid in chunk_ids:
+            g = games[gid]
+
+            game_rows.append((
+                clean_int(g.get("id")),
+                clean_text(g.get("slug")),
+                clean_text(g.get("name")),
+                clean_text(g.get("name_original")),
+                clean_text(g.get("description")),
+                clean_text(g.get("description_raw")),
+                clean_text(g.get("released")),
+                clean_text(g.get("background_image")),
+                clean_text(g.get("background_image_additional")),
+                clean_int(g.get("suggestions_count")),
+                extract_platforms(g.get("platforms")),
+                extract_names(g.get("developers")),
+                extract_names(g.get("publishers")),
+                extract_names(g.get("genres")),
+                extract_names(g.get("tags")),
+                json.dumps(g.get("esrb_rating")) if g.get("esrb_rating") else None,
+                clean_text(g.get("website")),
+                clean_int(g.get("screenshots_count")),
+                clean_int(g.get("achievements_count")),
+                clean_int(g.get("game_series_count")),
+                clean_int(g.get("additions_count")),
+                clean_int(g.get("parents_count")),
+                extract_names(g.get("alternative_names")),
+                g.get("rating") or 0.0,
+                clean_int(g.get("ratings_count")),
+                clean_int(g.get("metacritic")),
+            ))
+
+            texts.append(build_structured_text(g))
+            chunk_game_ids.append(gid)
+
+        # -------- Batch encode --------
+        embeddings = model.encode(
+            texts,
+            batch_size=64,
             convert_to_numpy=True,
-            normalize_embeddings=False,  # normalization applied at FAISS stage
+            normalize_embeddings=False,
         ).astype("float32")
 
-        embedding_rows.append((gid, embedding.tolist()))
-        faiss_vectors.append(embedding)
-        faiss_ids.append(gid)
+        embedding_rows = [
+            (gid, emb.tolist())
+            for gid, emb in zip(chunk_game_ids, embeddings)
+        ]
 
-        print(f"Prepared game {gid}: {g.get('name')}")
-        time.sleep(0.2)
+        # -------- Insert chunk --------
+        if game_rows:
+            insert_games_batch(conn, game_rows)
 
-    # -------- Batch inserts --------
-    if game_rows:
-        insert_games_batch(conn, game_rows)
-        print(f"Inserted {len(game_rows)} games to DB.")
+        if embedding_rows:
+            insert_embeddings_batch(conn, embedding_rows)
 
-    if embedding_rows:
-        insert_embeddings_batch(conn, embedding_rows)
-        print(f"Inserted {len(embedding_rows)} embeddings to DB.")
+        # Accumulate for single FAISS update after all chunks
+        if len(chunk_game_ids) > 0:
+            all_faiss_ids.extend(chunk_game_ids)
+            all_faiss_vectors.extend(list(embeddings))
 
-    # -------- FAISS update --------
-    if faiss_vectors:
-        update_faiss(faiss_ids, faiss_vectors)
+        print(f"Committed chunk {i // CHUNK_SIZE + 1}: {len(chunk_ids)} games")
+
+    # -------- Single FAISS update (prevents duplicate IDs on crash) --------
+    if all_faiss_ids:
+        update_faiss(all_faiss_ids, all_faiss_vectors)
 
     if first_id is not None:
         save_checkpoint(first_id)

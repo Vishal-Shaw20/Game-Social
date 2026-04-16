@@ -1,3 +1,5 @@
+from concurrent.futures import ThreadPoolExecutor
+
 from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import List, Dict
@@ -40,11 +42,10 @@ def recommend(payload: RecommendationRequest):
         quotas = [2, 2, 1]
         max_rows = 3
 
-    # 3️⃣ Fetch recommendations ONCE per game
-    recs: Dict[int, List[int]] = {
-        gid: get_recommendations(game_id=gid, k=50)
-        for gid in rawg_ids
-    }
+    # 3️⃣ Fetch recommendations ONCE per game (parallel)
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        futures = {gid: executor.submit(get_recommendations, game_id=gid, k=50) for gid in rawg_ids}
+        recs: Dict[int, List[int]] = {gid: f.result() for gid, f in futures.items()}
 
     # 4️⃣ Track how many we have already used per game
     pointers = {gid: 0 for gid in rawg_ids}
@@ -64,7 +65,6 @@ def recommend(payload: RecommendationRequest):
             row.extend(available[:quota])   # take whatever is left
             pointers[gid] = start + min(quota, len(available))
 
-        # Row must always have exactly 5 items
         if row:
             result.append(row)
 

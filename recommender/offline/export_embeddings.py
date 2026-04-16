@@ -1,91 +1,89 @@
-import os
 import psycopg2
 import numpy as np
 import pickle
-from dotenv import load_dotenv
+from recommender.config import DB_CONFIG, ARTIFACTS_DIR
 
 EMB_DIM = 1024    # changed from 384 — bge-large-en-v1.5 is 1024 dims
 BATCH   = 50000
 
-# ---------------- DB CONNECT ----------------
 
-load_dotenv()
-conn = psycopg2.connect(
-    dbname=os.getenv('DB_NAME'),
-    user=os.getenv('DB_USER'),
-    password=os.getenv('DB_PASSWORD'),
-    host=os.getenv('DB_HOST'),
-    port=os.getenv('DB_PORT')
-)
-cur = conn.cursor()
+def main():
+    # ---------------- DB CONNECT ----------------
 
-# -------- GET ACTUAL ROW COUNT --------
+    conn = psycopg2.connect(**DB_CONFIG)
+    cur = conn.cursor()
 
-cur.execute("SELECT COUNT(*) FROM content_embeddings;")
-TOTAL_ROWS = cur.fetchone()[0]
+    # -------- GET ACTUAL ROW COUNT --------
 
-print(f"Total embeddings in DB: {TOTAL_ROWS}")
+    cur.execute("SELECT COUNT(*) FROM content_embeddings;")
+    TOTAL_ROWS = cur.fetchone()[0]
 
-# -------- CREATE MEMMAP FILES --------
+    print(f"Total embeddings in DB: {TOTAL_ROWS}")
 
-embeddings = np.memmap(
-    "../artifacts/embeddings.memmap",
-    dtype="float32",
-    mode="w+",
-    shape=(TOTAL_ROWS, EMB_DIM)
-)
+    # -------- CREATE MEMMAP FILES --------
 
-ids = np.memmap(
-    "../artifacts/ids.memmap",
-    dtype="int64",    # changed from int32 — game IDs may exceed int32 range
-    mode="w+",
-    shape=(TOTAL_ROWS,)
-)
+    embeddings = np.memmap(
+        str(ARTIFACTS_DIR / "embeddings.memmap"),
+        dtype="float32",
+        mode="w+",
+        shape=(TOTAL_ROWS, EMB_DIM)
+    )
 
-titles = []
+    ids = np.memmap(
+        str(ARTIFACTS_DIR / "ids.memmap"),
+        dtype="int64",    # changed from int32 — game IDs may exceed int32 range
+        mode="w+",
+        shape=(TOTAL_ROWS,)
+    )
 
-# -------- STREAM BY PRIMARY KEY --------
+    titles = []
 
-last_id = 0
-written = 0
+    # -------- STREAM BY PRIMARY KEY --------
 
-print("Starting export...")
+    last_id = 0
+    written = 0
 
-while True:
+    print("Starting export...")
 
-    cur.execute("""
-                SELECT ce.game_id,
-                       g.name,
-                       ce.embedding
-                FROM content_embeddings ce
-                         JOIN games g ON g.id = ce.game_id
-                WHERE ce.game_id > %s
-                ORDER BY ce.game_id
-                    LIMIT %s;
-                """, (last_id, BATCH))
+    while True:
 
-    rows = cur.fetchall()
+        cur.execute("""
+                    SELECT ce.game_id,
+                           g.name,
+                           ce.embedding
+                    FROM content_embeddings ce
+                             JOIN games g ON g.id = ce.game_id
+                    WHERE ce.game_id > %s
+                    ORDER BY ce.game_id
+                        LIMIT %s;
+                    """, (last_id, BATCH))
 
-    if not rows:
-        break
+        rows = cur.fetchall()
 
-    for game_id, title, emb in rows:
-        embeddings[written] = np.array(emb, dtype="float32")
-        ids[written]        = game_id
-        titles.append(title)
-        written += 1
+        if not rows:
+            break
 
-    last_id = rows[-1][0]
+        for game_id, title, emb in rows:
+            embeddings[written] = np.array(emb, dtype="float32")
+            ids[written]        = game_id
+            titles.append(title)
+            written += 1
 
-    print(f"Written: {written}/{TOTAL_ROWS}")
+        last_id = rows[-1][0]
 
-# -------- FLUSH TO DISK --------
+        print(f"Written: {written}/{TOTAL_ROWS}")
 
-embeddings.flush()
-ids.flush()
+    # -------- FLUSH TO DISK --------
 
-with open("../artifacts/titles.pkl", "wb") as f:
-    pickle.dump(titles, f)
+    embeddings.flush()
+    ids.flush()
 
-print("DONE — Export complete.")
-conn.close()
+    with open(str(ARTIFACTS_DIR / "titles.pkl"), "wb") as f:
+        pickle.dump(titles, f)
+
+    print("DONE — Export complete.")
+    conn.close()
+
+
+if __name__ == "__main__":
+    main()

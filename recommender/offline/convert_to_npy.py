@@ -1,47 +1,54 @@
 import numpy as np
 import pickle
 import os
+from recommender.config import ARTIFACTS_DIR
 
 EMB_DIM = 1024    # changed from 384 — bge-large-en-v1.5 is 1024 dims
 
-emb_path = "../artifacts/embeddings.memmap"
-ids_path = "../artifacts/ids.memmap"
 
-# -------- DETECT ROW COUNT FROM FILE SIZE --------
+def main():
+    emb_path = str(ARTIFACTS_DIR / "embeddings.memmap")
+    ids_path = str(ARTIFACTS_DIR / "ids.memmap")
 
-file_size = os.path.getsize(emb_path)
+    # -------- DETECT ROW COUNT FROM FILE SIZE --------
 
-# float32 = 4 bytes
-TOTAL_ROWS = file_size // (4 * EMB_DIM)
+    file_size = os.path.getsize(emb_path)
 
-print(f"Detected rows: {TOTAL_ROWS}")
+    # float32 = 4 bytes
+    TOTAL_ROWS = file_size // (4 * EMB_DIM)
 
-# -------- LOAD MEMMAP FILES --------
+    print(f"Detected rows: {TOTAL_ROWS}")
 
-emb = np.memmap(
-    emb_path,
-    dtype="float32",
-    mode="r",
-    shape=(TOTAL_ROWS, EMB_DIM)
-)
+    # -------- LOAD MEMMAP FILES --------
 
-ids = np.memmap(
-    ids_path,
-    dtype="int64",    # changed from int32 — matches export_embeddings.py
-    mode="r",
-    shape=(TOTAL_ROWS,)
-)
+    emb = np.memmap(
+        emb_path,
+        dtype="float32",
+        mode="r",
+        shape=(TOTAL_ROWS, EMB_DIM)
+    )
 
-# -------- SAVE DIRECTLY (NO FULL RAM COPY) --------
+    ids = np.memmap(
+        ids_path,
+        dtype="int64",    # changed from int32 — matches export_embeddings.py
+        mode="r",
+        shape=(TOTAL_ROWS,)
+    )
 
-np.save("../artifacts/embeddings.npy", emb)
-np.save("../artifacts/ids.npy", ids)
+    # -------- SAVE DIRECTLY (NO FULL RAM COPY) --------
 
-# -------- SAVE TITLES --------
+    np.save(str(ARTIFACTS_DIR / "embeddings.npy"), emb)
+    np.save(str(ARTIFACTS_DIR / "ids.npy"), ids)
 
-with open("../artifacts/titles.pkl", "rb") as f:
-    titles = pickle.load(f)
+    # -------- SAVE TITLES --------
 
-np.save("../artifacts/titles.npy", np.array(titles, dtype=object))
+    with open(str(ARTIFACTS_DIR / "titles.pkl"), "rb") as f:
+        titles = pickle.load(f)
 
-print("Conversion to NPY completed.")
+    np.save(str(ARTIFACTS_DIR / "titles.npy"), np.array(titles, dtype=object))
+
+    print("Conversion to NPY completed.")
+
+
+if __name__ == "__main__":
+    main()

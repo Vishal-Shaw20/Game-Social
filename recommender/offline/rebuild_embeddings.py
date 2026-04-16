@@ -1,20 +1,19 @@
 import os
 import psycopg2
 import numpy as np
-from dotenv import load_dotenv
 from sentence_transformers import SentenceTransformer
 from psycopg2.extras import execute_values
 from tqdm import tqdm
 from datetime import datetime, UTC
 import torch
+from recommender.config import DB_CONFIG
+from recommender.text_builder import clean_field, build_structured_text
 
 torch.set_num_threads(os.cpu_count())
 
 # ---------------- CONFIG ----------------
 
 MODEL_NAME = "BAAI/bge-large-en-v1.5"
-
-load_dotenv()
 
 FETCH_BATCH = 2000
 ENCODE_BATCH = 64
@@ -24,24 +23,9 @@ INSERT_BATCH = 2000
 START_ID = 0
 END_ID = 1100000   # change this per run
 
-DB_CONFIG = {
-    "dbname": os.getenv("DB_NAME"),
-    "user": os.getenv("DB_USER"),
-    "password": os.getenv("DB_PASSWORD"),
-    "host": os.getenv("DB_HOST"),
-    "port": os.getenv("DB_PORT"),
-}
-
 # ---------------- TEXT BUILD ----------------
 
-def clean_field(field):
-    if isinstance(field, list):
-        return ", ".join(field)
-    if isinstance(field, dict):
-        return field.get("name", "")
-    return field or ""
-
-def build_structured_text(row):
+def row_to_structured_text(row):
     name = row[1] or ""
     genres = clean_field(row[2])
     tags = clean_field(row[3])
@@ -50,15 +34,7 @@ def build_structured_text(row):
     publishers = clean_field(row[6])
     description = (row[7] or "")[:800]
 
-    text = (
-        f"CORE IDENTITY: This game is {name}, an {genres} title. "
-        f"GAMEPLAY MECHANICS: {genres} gameplay involving {tags}. "
-        f"NARRATIVE THEME: The setting and story involve {description}. "
-        f"AUDIENCE: Rated {esrb} by ESRB. "
-        f"STUDIO: Developed by {developers}, published by {publishers}."
-    )
-
-    return f"Represent this game for retrieving similar gameplay experiences: {text}"
+    return build_structured_text(name, genres, tags, esrb, developers, publishers, description)
 
 # ---------------- MAIN ----------------
 
@@ -111,7 +87,7 @@ def main():
             break
 
         ids = [row[0] for row in rows]
-        texts = [build_structured_text(row) for row in rows]
+        texts = [row_to_structured_text(row) for row in rows]
 
         embeddings = model.encode(
             texts,
@@ -132,6 +108,9 @@ def main():
             """
             INSERT INTO content_embeddings (game_id, embedding, updated_at)
             VALUES %s
+            ON CONFLICT (game_id)
+            DO UPDATE SET embedding  = EXCLUDED.embedding,
+                          updated_at = EXCLUDED.updated_at
             """,
             insert_data,
             page_size=INSERT_BATCH
