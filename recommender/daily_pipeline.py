@@ -102,7 +102,7 @@ def build_structured_text(g: dict) -> str:
     publishers  = ", ".join(extract_names(g.get("publishers")))
     description = (g.get("description_raw") or "")[:800]
 
-    return _build_text(name, genres, tags, esrb, developers, publishers, description)
+    return _build_text("", genres, tags, esrb, developers, publishers, description)
 
 # ============================================================
 # -------------------- CHECKPOINT ----------------------------
