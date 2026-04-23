@@ -27,4 +27,9 @@ async def global_exception_handler(request: Request, exc: Exception):
     return JSONResponse(status_code=500, content={"error": "Internal server error"})
 
 
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
 app.include_router(recommender_router)

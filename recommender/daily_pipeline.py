@@ -26,6 +26,14 @@ RAWG_API_KEYS = [
     os.getenv("RAWG_API_KEY_5"),
     os.getenv("RAWG_API_KEY_6"),
     os.getenv("RAWG_API_KEY_7"),
+    os.getenv("RAWG_API_KEY_8"),
+    os.getenv("RAWG_API_KEY_9"),
+    os.getenv("RAWG_API_KEY_10"),
+    os.getenv("RAWG_API_KEY_11"),
+    os.getenv("RAWG_API_KEY_12"),
+    os.getenv("RAWG_API_KEY_13"),
+    os.getenv("RAWG_API_KEY_14"),
+    os.getenv("RAWG_API_KEY_15"),
 ]
 RAWG_API_KEYS    = [k for k in RAWG_API_KEYS if k]  # remove None if fewer than 8 set
 current_key_index = 0
@@ -88,6 +96,31 @@ def extract_platforms(field):
     if not field:
         return []
     return [p["platform"]["name"] for p in field if "platform" in p]
+
+# ============================================================
+# -------------------- SERIES FETCH --------------------------
+# ============================================================
+
+def fetch_series_for_game(game_id: int) -> list[int]:
+    series_ids = []
+    page = 1
+
+    while True:
+        url = f"https://api.rawg.io/api/games/{game_id}/game-series?page={page}"
+        response = rawg_get(url)
+
+        if response is None or response.status_code != 200:
+            break
+
+        data = response.json()
+        for g in data.get("results", []):
+            series_ids.append(g["id"])
+
+        if not data.get("next"):
+            break
+        page += 1
+
+    return series_ids
 
 # ============================================================
 # -------------------- TEXT BUILD ----------------------------
@@ -170,6 +203,19 @@ def insert_embeddings_batch(conn, rows):
               ON CONFLICT (game_id)
         DO UPDATE SET embedding   = EXCLUDED.embedding,
                              updated_at  = NOW(); \
+          """
+    with conn.cursor() as cur:
+        execute_values(cur, sql, rows)
+    conn.commit()
+
+
+def insert_series_batch(conn, rows):
+    if not rows:
+        return
+    sql = """
+          INSERT INTO game_series (game_id, series_game_id)
+          VALUES %s
+              ON CONFLICT DO NOTHING;
           """
     with conn.cursor() as cur:
         execute_values(cur, sql, rows)
@@ -299,6 +345,35 @@ def run_daily_pipeline():
                 print(f"Skipped game {gid} (fetch failed)")
 
     print(f"Fetched {len(games)} game details")
+
+    # -------- Parallel fetch series + insert bidirectional mappings --------
+    series_games = [gid for gid in games if (games[gid].get("game_series_count") or 0) > 0]
+
+    if series_games:
+        series_map = {}
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            future_to_id = {
+                executor.submit(fetch_series_for_game, gid): gid
+                for gid in series_games
+            }
+            for future in as_completed(future_to_id):
+                gid = future_to_id[future]
+                try:
+                    series_map[gid] = future.result()
+                except Exception:
+                    series_map[gid] = []
+
+        series_rows = []
+        for gid, members in series_map.items():
+            if members:
+                for mid in members:
+                    series_rows.append((gid, mid))
+                    series_rows.append((mid, gid))
+            else:
+                series_rows.append((gid, gid))
+
+        insert_series_batch(conn, series_rows)
+        print(f"Inserted series mappings for {len(series_games)} games")
 
     # -------- Process in chunks --------
     valid_ids = [gid for gid in ordered_ids if gid in games]

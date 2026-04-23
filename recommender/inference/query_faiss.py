@@ -1,20 +1,13 @@
 import faiss
-import requests
-import os
 import psycopg2
 import numpy as np
 from psycopg2.pool import ThreadedConnectionPool
-from concurrent.futures import ThreadPoolExecutor
 import math
 import time
 
 from recommender.config import DB_CONFIG, ARTIFACTS_DIR
 from recommender.inference.reranker import rerank
 from recommender.text_builder import clean_field, build_structured_text
-
-# -------------------- ENV --------------------
-
-API_KEY = os.getenv("RAWG_API_KEY")
 
 # -------------------- DB CONNECTION POOL --------------------
 
@@ -113,25 +106,137 @@ def fetch_candidate_texts(game_ids: list[int]) -> dict[int, str]:
     return result
 
 
-# -------------------- RAWG SERIES --------------------
+# -------------------- SERIES LOOKUP --------------------
 
 def fetch_series_ids(game_id: int) -> set:
-    series_ids = set()
-    url = f"https://api.rawg.io/api/games/{game_id}/game-series?key={API_KEY}"
-
-    while url:
-        try:
-            response = requests.get(url, timeout=5)
-            if response.status_code != 200:
-                break
-            data = response.json()
-            for g in data.get("results", []):
-                series_ids.add(g["id"])
-            url = data.get("next")
-        except Exception:
-            break
+    conn = db_pool.getconn()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT series_game_id FROM game_series WHERE game_id = %s AND series_game_id != game_id;",
+            (game_id,)
+        )
+        series_ids = {row[0] for row in cur.fetchall()}
+        cur.close()
+    finally:
+        db_pool.putconn(conn)
 
     return series_ids
+
+
+# -------------------- SCORING + FILTERING --------------------
+
+WEIGHTS = {
+    "reranker":   0.35,
+    "faiss":      0.35,
+    "genre":      0.10,
+    "rating":     0.10,
+    "metacritic": 0.05,
+    "popularity": 0.05,
+}
+
+def score_candidates(reranked, game_meta, faiss_scores_dict, series_ids, query_genres, weights=None):
+    w = weights or WEIGHTS
+    reranker_scores = {c["game_id"]: c["reranker_score"] for c in reranked}
+    min_faiss_score = min(faiss_scores_dict.values()) if faiss_scores_dict else 0.0
+
+    ranked = []
+
+    for cand_id in (c["game_id"] for c in reranked):
+        if cand_id not in game_meta:
+            continue
+
+        m = game_meta[cand_id]
+
+        rating     = m["rating"]       or 0
+        count      = m["ratings_count"] or 0
+        meta_score = m["metacritic"]   or 0
+
+        rating_norm    = rating / 5
+        meta_norm      = meta_score / 100
+        count_score    = min(math.log10(count + 1) / math.log10(1_000_000), 1.0)
+        raw_reranker   = reranker_scores.get(cand_id, 0.0)
+        reranker_score = 1 / (1 + math.exp(-raw_reranker))
+
+        if cand_id in faiss_scores_dict:
+            faiss_score = faiss_scores_dict[cand_id]
+        elif cand_id in series_ids:
+            faiss_score = min_faiss_score
+        else:
+            faiss_score = 0.0
+
+        cand_genres = set(m.get("genres") or [])
+        if query_genres:
+            genre_overlap = len(query_genres & cand_genres) / len(query_genres)
+        else:
+            genre_overlap = 0.0
+
+        final_score = (
+                w["reranker"]   * reranker_score +
+                w["faiss"]      * faiss_score +
+                w["genre"]      * genre_overlap +
+                w["rating"]     * rating_norm +
+                w["metacritic"] * meta_norm +
+                w["popularity"] * count_score
+        )
+
+        ranked.append((cand_id, final_score))
+
+    ranked.sort(key=lambda x: x[1], reverse=True)
+    return ranked
+
+
+def apply_filters(ranked, game_meta, series_ids, query_name, query_genres,
+                  k=10, max_per_series=3, max_per_dev=2):
+    ranked_ids = [x[0] for x in ranked]
+
+    result       = []
+    seen         = set()
+    series_taken = 0
+    dev_counts   = {}
+
+    for cand_id in ranked_ids:
+
+        if cand_id in seen:
+            continue
+
+        if cand_id not in series_ids:
+            cand_name = (game_meta.get(cand_id, {}).get("name") or "").lower()
+            if query_name and cand_name:
+                if query_name in cand_name or cand_name in query_name:
+                    continue
+
+        if "Sports" in query_genres:
+            cand_genres = set(game_meta.get(cand_id, {}).get("genres") or [])
+            if not (query_genres & cand_genres):
+                continue
+
+        if cand_id in series_ids:
+            if series_taken >= max_per_series:
+                continue
+            series_taken += 1
+
+        developers = game_meta.get(cand_id, {}).get("developers")
+        if isinstance(developers, list) and developers:
+            dev = developers[0].strip().lower()
+        elif isinstance(developers, str) and developers:
+            dev = developers.strip().lower()
+        else:
+            dev = "unknown"
+        dev = " ".join(dev.split()[:2]) if dev != "unknown" else "unknown"
+
+        if dev != "unknown":
+            if dev_counts.get(dev, 0) >= max_per_dev:
+                continue
+            dev_counts[dev] = dev_counts.get(dev, 0) + 1
+
+        result.append(cand_id)
+        seen.add(cand_id)
+
+        if len(result) == k:
+            break
+
+    return result
 
 
 # -------------------- RECOMMENDATION --------------------
@@ -140,15 +245,12 @@ def get_recommendations(game_id: int, k: int = 10, max_per_series: int = 3):
 
     t0 = time.perf_counter()
 
-    # ---- STAGE 1: FAISS retrieval & EARLY SERIES FETCH ----
+    # ---- STAGE 1: FAISS retrieval + SERIES LOOKUP ----
 
-    # Run RAWG series fetch in background while doing FAISS query
-    executor = ThreadPoolExecutor(max_workers=1)
-    series_future = executor.submit(fetch_series_ids, game_id)
+    series_ids = fetch_series_ids(game_id)
 
     query = fetch_embedding_from_db(game_id)
     if query is None:
-        executor.shutdown(wait=False)
         return []
 
     scores, returned_ids = index.search(query, 500)
@@ -162,16 +264,7 @@ def get_recommendations(game_id: int, k: int = 10, max_per_series: int = 3):
             faiss_scores_dict[cid] = float(score)
 
     t1 = time.perf_counter()
-    print(f"[TIMING] FAISS search: {t1 - t0:.2f}s")
-
-    # Wait for RAWG series fetch before metadata fetch
-    try:
-        series_ids = series_future.result(timeout=10.0)
-    except Exception as e:
-        print(f"Warning: series fetch failed or timed out: {e}")
-        series_ids = set()
-    finally:
-        executor.shutdown(wait=False)
+    print(f"[TIMING] FAISS search + series lookup: {t1 - t0:.2f}s")
 
     # Combine FAISS results and series IDs
     all_to_fetch = list(set(faiss_candidates) | series_ids)
@@ -258,114 +351,10 @@ def get_recommendations(game_id: int, k: int = 10, max_per_series: int = 3):
     t4 = time.perf_counter()
     print(f"[TIMING] Reranker: {t4 - t3:.2f}s")
 
-    reranked_ids = [c["game_id"] for c in reranked]
+    # ---- QUALITY SCORING + FILTERING ----
 
-    # ---- QUALITY SCORING (uses game_meta from above) ----
-
-    reranker_scores = {c["game_id"]: c["reranker_score"] for c in reranked}
-
-    # Impute FAISS score for series games that weren't in FAISS results
-    # Use the minimum FAISS score of the retrieved batch as a baseline, or 0.0 if empty
-    min_faiss_score = min(faiss_scores_dict.values()) if faiss_scores_dict else 0.0
-
-    ranked = []
-
-    for cand_id in reranked_ids:
-        if cand_id not in game_meta:
-            continue
-
-        m = game_meta[cand_id]
-
-        rating     = m["rating"]       or 0
-        count      = m["ratings_count"] or 0
-        meta_score = m["metacritic"]   or 0
-
-        rating_norm    = rating / 5
-        meta_norm      = meta_score / 100
-        count_score    = min(math.log10(count + 1) / math.log10(1_000_000), 1.0)
-        raw_reranker   = reranker_scores.get(cand_id, 0.0)
-        reranker_score = 1 / (1 + math.exp(-raw_reranker))   # sigmoid → [0, 1]
-
-        # Use baseline FAISS score if it's a series game missing from FAISS
-        if cand_id in faiss_scores_dict:
-            faiss_score = faiss_scores_dict[cand_id]
-        elif cand_id in series_ids:
-            faiss_score = min_faiss_score
-        else:
-            faiss_score = 0.0
-
-        # Genre overlap: ratio of shared genres between query and candidate
-        cand_genres = set(m.get("genres") or [])
-        if query_genres:
-            genre_overlap = len(query_genres & cand_genres) / len(query_genres)
-        else:
-            genre_overlap = 0.0
-
-        final_score = (
-                0.45 * reranker_score +
-                0.25 * faiss_score +
-                0.10 * genre_overlap +
-                0.10 * rating_norm +
-                0.05 * meta_norm +
-                0.05 * count_score
-        )
-
-        ranked.append((cand_id, final_score))
-
-    ranked.sort(key=lambda x: x[1], reverse=True)
-    ranked_ids = [x[0] for x in ranked]
-
-    # ---- SERIES FILTER + DEVELOPER CAP (uses game_meta from above) ----
-
-    result       = []
-    seen         = set()
-    series_taken = 0
-    dev_counts   = {}
-    max_per_dev  = 2
-
-    for cand_id in ranked_ids:
-
-        if cand_id in seen:
-            continue
-
-        # DLC/remaster filter: skip if candidate name contains query name or vice versa
-        # Exception: Do not skip if RAWG explicitly says they are in the same series!
-        if cand_id not in series_ids:
-            cand_name = (game_meta.get(cand_id, {}).get("name") or "").lower()
-            if query_name and cand_name:
-                if query_name in cand_name or cand_name in query_name:
-                    continue
-
-        # Hard genre filter: drop zero-overlap candidates for Sports queries
-        if "Sports" in query_genres:
-            cand_genres = set(game_meta.get(cand_id, {}).get("genres") or [])
-            if not (query_genres & cand_genres):
-                continue
-
-        if cand_id in series_ids:
-            if series_taken >= max_per_series:
-                continue
-            series_taken += 1
-
-        developers = game_meta.get(cand_id, {}).get("developers")
-        if isinstance(developers, list) and developers:
-            dev = developers[0].strip().lower()
-        elif isinstance(developers, str) and developers:
-            dev = developers.strip().lower()
-        else:
-            dev = "unknown"
-        dev = dev.split()[0] if dev != "unknown" else "unknown"
-
-        if dev != "unknown":
-            if dev_counts.get(dev, 0) >= max_per_dev:
-                continue
-            dev_counts[dev] = dev_counts.get(dev, 0) + 1
-
-        result.append(cand_id)
-        seen.add(cand_id)
-
-        if len(result) == k:
-            break
+    ranked = score_candidates(reranked, game_meta, faiss_scores_dict, series_ids, query_genres)
+    result = apply_filters(ranked, game_meta, series_ids, query_name, query_genres, k, max_per_series)
 
     t5 = time.perf_counter()
     print(f"[TIMING] Scoring + filter: {t5 - t4:.2f}s")

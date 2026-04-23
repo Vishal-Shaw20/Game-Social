@@ -1,3 +1,4 @@
+import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import APIRouter
@@ -21,51 +22,48 @@ class RecommendationResponse(BaseModel):
 
 # -------------------- Endpoint --------------------
 
-@router.post("/recommend", response_model=RecommendationResponse)
-def recommend(payload: RecommendationRequest):
+def _build_response(rawg_ids_input: List[int]) -> dict:
 
-    # 1️⃣ Use at most 3 RAWG IDs
-    rawg_ids = payload.rawg_ids[:3]
+    rawg_ids = rawg_ids_input[:3]
     n = len(rawg_ids)
 
     if n == 0:
         return {"rawg_ids": []}
 
-    # 2️⃣ Decide quotas + number of rows
     if n == 1:
         quotas = [5]
         max_rows = 2
     elif n == 2:
         quotas = [3, 2]
         max_rows = 3
-    else:  # n == 3
+    else:
         quotas = [2, 2, 1]
         max_rows = 3
 
-    # 3️⃣ Fetch recommendations ONCE per game (parallel)
     with ThreadPoolExecutor(max_workers=3) as executor:
         futures = {gid: executor.submit(get_recommendations, game_id=gid, k=50) for gid in rawg_ids}
         recs: Dict[int, List[int]] = {gid: f.result() for gid, f in futures.items()}
 
-    # 4️⃣ Track how many we have already used per game
     pointers = {gid: 0 for gid in rawg_ids}
-
     result: List[List[int]] = []
 
-    # 5️⃣ Build rows
     for _ in range(max_rows):
         row: List[int] = []
 
         for gid, quota in zip(rawg_ids, quotas):
             start = pointers[gid]
-            end = start + quota
-
-            # Take whatever is left if not enough recommendations remain
             available = recs[gid][start:]
-            row.extend(available[:quota])   # take whatever is left
+            row.extend(available[:quota])
             pointers[gid] = start + min(quota, len(available))
 
         if row:
             result.append(row)
 
     return {"rawg_ids": result}
+
+
+@router.post("/recommend", response_model=RecommendationResponse)
+async def recommend(payload: RecommendationRequest):
+    return await asyncio.get_event_loop().run_in_executor(
+        None, _build_response, payload.rawg_ids
+    )
