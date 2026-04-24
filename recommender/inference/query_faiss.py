@@ -8,6 +8,7 @@ import time
 from recommender.config import DB_CONFIG, ARTIFACTS_DIR
 from recommender.inference.reranker import rerank
 from recommender.text_builder import clean_field, build_structured_text
+from recommender.cache import get_cached, set_cached
 
 # -------------------- DB CONNECTION POOL --------------------
 
@@ -243,6 +244,11 @@ def apply_filters(ranked, game_meta, series_ids, query_name, query_genres,
 
 def get_recommendations(game_id: int, k: int = 10, max_per_series: int = 3):
 
+    cached = get_cached(game_id, k, max_per_series)
+    if cached is not None:
+        print(f"[TIMING] Cache HIT for game_id={game_id}")
+        return cached
+
     t0 = time.perf_counter()
 
     # ---- STAGE 1: FAISS retrieval + SERIES LOOKUP ----
@@ -360,4 +366,5 @@ def get_recommendations(game_id: int, k: int = 10, max_per_series: int = 3):
     print(f"[TIMING] Scoring + filter: {t5 - t4:.2f}s")
     print(f"[TIMING] TOTAL: {t5 - t0:.2f}s")
 
+    set_cached(game_id, k, max_per_series, result)
     return result

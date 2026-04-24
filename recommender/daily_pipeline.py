@@ -11,6 +11,7 @@ from pgvector.psycopg2 import register_vector
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from recommender.config import DB_CONFIG, ARTIFACTS_DIR
 from recommender.text_builder import build_structured_text as _build_text
+from recommender.cache import clear_all as clear_recommendation_cache
 
 # ============================================================
 # -------------------- ENV CONFIG ----------------------------
@@ -458,6 +459,7 @@ def run_daily_pipeline():
         save_checkpoint(first_id)
 
     conn.close()
+    clear_recommendation_cache()
     print("Daily pipeline completed.")
 
 # ============================================================
