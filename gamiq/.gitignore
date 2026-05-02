@@ -1,6 +1,7 @@
 .idea/
 .vscode/
 
+docs/
 dataset/
 notebooks/
 
