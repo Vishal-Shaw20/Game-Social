@@ -6,13 +6,10 @@ requests==2.32.5
 psycopg2-binary==2.9.11
 pgvector==0.4.2
 numpy==2.3.5
-pandas==2.3.3
 faiss-cpu==1.13.1
 sentence-transformers==5.1.2
 torch==2.9.1
 tqdm==4.67.1
-scikit-learn==1.7.2
-scipy==1.16.3
 pytest==9.0.2
-optimum[onnxruntime]
+optimum[onnxruntime]==2.1.0
 redis>=5.0.0
