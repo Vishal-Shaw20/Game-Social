@@ -1,0 +1,14 @@
+.idea/
+.vscode/
+
+dataset/
+notebooks/
+
+.venv/
+
+.env
+
+__pycache__/
+
+recommender/artifacts/*
+!recommender/artifacts/.gitkeep
