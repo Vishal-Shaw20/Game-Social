@@ -4,7 +4,7 @@ import pickle
 from recommender.config import DB_CONFIG, ARTIFACTS_DIR
 
 EMB_DIM = 1024    # changed from 384 — bge-large-en-v1.5 is 1024 dims
-BATCH   = 50000
+BATCH   = 10000
 
 
 def main():

@@ -1,84 +1,9 @@
-import os
-import time
-import requests
 import psycopg2
 from psycopg2.extras import execute_values
-from recommender.config import DB_CONFIG, ARTIFACTS_DIR
-
-# -------------------- ENV CONFIG --------------------
-
-RAWG_API_KEYS = [
-    os.getenv("RAWG_API_KEY"),
-    os.getenv("RAWG_API_KEY_1"),
-    os.getenv("RAWG_API_KEY_2"),
-    os.getenv("RAWG_API_KEY_3"),
-    os.getenv("RAWG_API_KEY_4"),
-    os.getenv("RAWG_API_KEY_5"),
-    os.getenv("RAWG_API_KEY_6"),
-    os.getenv("RAWG_API_KEY_7"),
-    os.getenv("RAWG_API_KEY_8"),
-    os.getenv("RAWG_API_KEY_9"),
-    os.getenv("RAWG_API_KEY_10"),
-    os.getenv("RAWG_API_KEY_11"),
-    os.getenv("RAWG_API_KEY_12"),
-    os.getenv("RAWG_API_KEY_13"),
-    os.getenv("RAWG_API_KEY_14"),
-    os.getenv("RAWG_API_KEY_15"),
-]
-RAWG_API_KEYS = [k for k in RAWG_API_KEYS if k]
-current_key_index = 0
+from recommender.config import DB_CONFIG
+from recommender.rawg_client import rawg_get, fetch_series_for_game
 
 BATCH_SIZE = 50
-
-# -------------------- API KEY ROTATION --------------------
-
-def rawg_get(url: str, timeout: int = 10):
-    global current_key_index
-
-    for attempt in range(len(RAWG_API_KEYS)):
-        key      = RAWG_API_KEYS[current_key_index]
-        sep      = "&" if "?" in url else "?"
-        full_url = f"{url}{sep}key={key}"
-
-        try:
-            response = requests.get(full_url, timeout=timeout)
-        except Exception as e:
-            print(f"Request error: {e}")
-            return None
-
-        if response.status_code == 429:
-            print(f"Rate limit hit on key {current_key_index + 1}, switching...")
-            current_key_index = (current_key_index + 1) % len(RAWG_API_KEYS)
-            time.sleep(1)
-            continue
-
-        return response
-
-    print("All API keys exhausted.")
-    return None
-
-# -------------------- SERIES FETCH --------------------
-
-def fetch_series_for_game(game_id: int) -> list[int]:
-    series_ids = []
-    page = 1
-
-    while True:
-        url = f"https://api.rawg.io/api/games/{game_id}/game-series?page={page}"
-        response = rawg_get(url)
-
-        if response is None or response.status_code != 200:
-            break
-
-        data = response.json()
-        for g in data.get("results", []):
-            series_ids.append(g["id"])
-
-        if not data.get("next"):
-            break
-        page += 1
-
-    return series_ids
 
 # -------------------- MAIN --------------------
 
