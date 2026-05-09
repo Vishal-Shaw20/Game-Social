@@ -1,6 +1,9 @@
 import threading
+from pathlib import Path
 
-from sentence_transformers import CrossEncoder
+import numpy as np
+import onnxruntime as ort
+from transformers import AutoTokenizer
 
 from recommender.config import ARTIFACTS_DIR
 
@@ -11,10 +14,10 @@ TOP_N              = 20    # number of final results to return after re-ranking
 
 # ---------------- LOAD MODEL ----------------
 
-# Load ONNX INT8 model once at module level — not on every request
-# Run `python -m recommender.offline.export_reranker_onnx` first to generate the model
-reranker = CrossEncoder(RERANKER_ONNX_PATH, backend="onnx", model_kwargs={"file_name": "model_quantized.onnx"})
-_lock    = threading.Lock()
+tokenizer = AutoTokenizer.from_pretrained(RERANKER_ONNX_PATH)
+session   = ort.InferenceSession(str(Path(RERANKER_ONNX_PATH) / "model_quantized.onnx"))
+_input_names = [inp.name for inp in session.get_inputs()]
+_lock     = threading.Lock()
 
 # ---------------- RERANK FUNCTION ----------------
 
@@ -40,7 +43,12 @@ def rerank(query_text: str, candidates: list[dict], top_n: int = TOP_N) -> list[
 
     # Score all pairs — lock prevents concurrent predict() calls from corrupting state
     with _lock:
-        scores = reranker.predict(pairs)
+        encoded = tokenizer(
+            pairs, padding=True, truncation=True, max_length=512, return_tensors="np"
+        )
+        inputs = {k: v for k, v in encoded.items() if k in _input_names}
+        logits = session.run(None, inputs)[0]
+        scores = logits[:, 0] if logits.ndim == 2 else logits
 
     # Attach scores to candidates
     for candidate, score in zip(candidates, scores):

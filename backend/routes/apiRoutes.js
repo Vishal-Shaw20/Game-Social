@@ -427,7 +427,7 @@ router.get("/new-releases", async (req, res) => {
     const { rows } = await db.query(
       `
       SELECT
-        rawg_id,
+        id,
         name,
         background_image,
         released
@@ -444,7 +444,7 @@ router.get("/new-releases", async (req, res) => {
 
     res.json(
       rows.map(r => ({
-        id: r.rawg_id,
+        id: r.id,
         title: r.name,
         background_image: r.background_image,
         released: r.released
@@ -480,21 +480,21 @@ router.get("/gsrecommended", async (req, res) => {
     const { rows } = await db.query(
       `
       SELECT
-        rawg_id,
+        id,
         name,
         background_image,
         released
       FROM games
-      WHERE rawg_id = ANY($1)
+      WHERE id = ANY($1)
         AND background_image IS NOT NULL
-      ORDER BY array_position($1, rawg_id)
+      ORDER BY array_position($1, id)
       `,
       [RECOMMENDED_RAWG_IDS]
     );
 
     res.json(
       rows.map(r => ({
-        id: r.rawg_id,
+        id: r.id,
         title: r.name,
         background_image: r.background_image,
         released: r.released

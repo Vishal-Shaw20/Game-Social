@@ -118,11 +118,11 @@ export default function GameSearch() {
         <div className={`results-float ${showResults ? "visible" : ""}`}>
           {results.slice(0, MAX_RECOMMENDATIONS).map(g => (
             <div
-              key={g.rawg_id}
+              key={g.id}
               className="result-row"
               onClick={() => {
                 setOpen(false);
-                navigate(`/game/${g.rawg_id}`);
+                navigate(`/game/${g.id}`);
               }}
             >
               {g.name}

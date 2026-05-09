@@ -10,8 +10,8 @@ import {
 
 const router = express.Router();
 
-const RAWG_KEY = process.env.RAWG_API_KEY;
-const RAWG_BASE = "https://api.rawg.io/api/games";
+const GAMIQ_URL = process.env.GAMIQ_URL || "http://localhost:8000";
+const PIPELINE_API_KEY = process.env.PIPELINE_API_KEY;
 
 // safe integer parse
 const toInt = (v, d = 50) => {
@@ -31,68 +31,24 @@ async function batchMap(items, batchSize, fn) {
   return out;
 }
 
-// ensure RAWG game exists in games table
+// ensure RAWG game exists in games table via gamiq
 async function ensureRawgGame(client, rawgId) {
   const exists = await client.query(
-    `SELECT 1 FROM games WHERE rawg_id = $1 LIMIT 1`,
+    `SELECT 1 FROM games WHERE id = $1 LIMIT 1`,
     [rawgId]
   );
   if (exists.rowCount > 0) return;
-  if (!RAWG_KEY) return;
 
-  const r = await fetch(`${RAWG_BASE}/${rawgId}?key=${RAWG_KEY}`);
-  if (!r.ok) return;
-
-  const g = await r.json();
-
-  await client.query(
-    `INSERT INTO games (
-      rawg_id, slug, name, name_original, description, description_raw, released,
-      background_image, background_image_additional, suggestions_count,
-      platforms, developers, publishers, genres, tags, esrb_rating, website,
-      screenshots_count, achievements_count, game_series_count, additions_count,
-      parents_count, alternative_names
-    ) VALUES (
-      $1,$2,$3,$4,$5,$6,$7,
-      $8,$9,$10,
-      $11,$12,$13,$14,$15,$16,$17,
-      $18,$19,$20,$21,$22,$23
-    )
-    ON CONFLICT (rawg_id) DO NOTHING`,
-    [
-      g.id,
-      g.slug,
-      g.name,
-      g.name_original,
-      g.description,
-      g.description_raw,
-      g.released,
-      g.background_image,
-      g.background_image_additional,
-      g.suggestions_count,
-
-      // jsonb columns
-      JSON.stringify(g.platforms ?? []),
-      JSON.stringify(g.developers ?? []),
-      JSON.stringify(g.publishers ?? []),
-      JSON.stringify(g.genres ?? []),
-      JSON.stringify(g.tags ?? []),
-
-      JSON.stringify(g.esrb_rating ?? null),
-      g.website ?? null,
-
-      g.screenshots_count ?? 0,
-      g.achievements_count ?? 0,
-      g.game_series_count ?? 0,
-      g.additions_count ?? 0,
-      g.parents_count ?? 0,
-
-      // ✅ ARRAY (text[])
-      Array.isArray(g.alternative_names)
-        ? g.alternative_names
-        : []
-    ]
-  );
+  try {
+    await fetch(`${GAMIQ_URL}/games/ensure/${rawgId}`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${PIPELINE_API_KEY}`
+      }
+    });
+  } catch (err) {
+    console.warn(`[trending] Failed to ensure game ${rawgId} via gamiq:`, err.message);
+  }
 }
 
 router.get("/", async (req, res) => {
@@ -149,8 +105,8 @@ router.get("/", async (req, res) => {
         let game = null;
         if (mapping?.rawg_id) {
           const { rows } = await client.query(
-            `SELECT rawg_id, slug, released, platforms, background_image
-             FROM games WHERE rawg_id = $1`,
+            `SELECT id, slug, released, platforms, background_image
+             FROM games WHERE id = $1`,
             [mapping.rawg_id]
           );
           game = rows[0] || null;

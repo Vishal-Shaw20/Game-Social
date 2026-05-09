@@ -20,7 +20,7 @@ export default function HomePage() {
     return list.map(g => {
       const mapping = g.mapping ?? null;
       const rawgId =
-        mapping?.rawg_id ?? g.rawg_id ?? g.id ?? g.steam_id ?? null;
+        mapping?.rawg_id ?? g.id ?? g.steam_id ?? null;
 
       return {
         id: String(rawgId ?? g.slug ?? g.id),

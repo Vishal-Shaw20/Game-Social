@@ -14,6 +14,8 @@ DB_CONFIG = {
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
+HF_TOKEN = os.getenv("HF_TOKEN")
+
 BASE_DIR      = Path(__file__).resolve().parent
 ARTIFACTS_DIR = BASE_DIR / "artifacts"
 

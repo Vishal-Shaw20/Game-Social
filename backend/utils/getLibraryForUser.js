@@ -39,7 +39,7 @@ export async function getLibraryForUser(userId) {
     }
 
     if (rawgId) {
-      rawgIds.push(String(rawgId));
+      rawgIds.push(Number(rawgId));
       steamToRawg.set(steamId, String(rawgId));
     }
   }
@@ -55,13 +55,13 @@ export async function getLibraryForUser(userId) {
   }
 
   const { rows: rawgGames } = await pg.query(
-    `SELECT * FROM games WHERE rawg_id = ANY($1)`,
+    `SELECT * FROM games WHERE id = ANY($1)`,
     [rawgIds]
   );
 
   const rawgMap = new Map();
   for (const g of rawgGames) {
-    rawgMap.set(String(g.rawg_id), g);
+    rawgMap.set(String(g.id), g);
   }
 
   const finalGames = library.games

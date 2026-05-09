@@ -44,7 +44,7 @@ export default function Library() {
 
       <div className="library-grid">
         {data.games.map(({ steam, rawg }) => {
-          const rawgId = rawg?.rawg_id;
+          const rawgId = rawg?.id;
           const clickable = Boolean(rawgId);
 
           return (

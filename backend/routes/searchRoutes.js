@@ -31,7 +31,7 @@ router.get("/games", async (req, res) => {
      where.push(`
     EXISTS (
       SELECT 1
-      FROM jsonb_array_elements_text(genres) g
+      FROM unnest(genres) g
       WHERE lower(g) = ANY($${idx})
     )
   `);
@@ -43,7 +43,7 @@ router.get("/games", async (req, res) => {
       where.push(`
     EXISTS (
       SELECT 1
-      FROM jsonb_array_elements_text(platforms) p
+      FROM unnest(platforms) p
       WHERE lower(p) = ANY($${idx})
     )
   `);
@@ -58,7 +58,7 @@ router.get("/games", async (req, res) => {
     values.push(q);
 
     const sql = `
-      SELECT rawg_id, name, suggestions_count
+      SELECT id, name, suggestions_count
       FROM games
       WHERE ${where.join(" AND ")}
       ORDER BY ${orderBy}

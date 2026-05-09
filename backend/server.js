@@ -78,18 +78,12 @@ app.use(
       mongoUrl: process.env.MONGO_URI,
       collectionName: "sessions"
     }),
-    // cookie: {
-    //   maxAge: 1000 * 60 * 60 * 24 * 7,
-    //   httpOnly: true,
-    //   secure: true,        // REQUIRED for HTTPS (Vercel/Railway)
-    //   sameSite: "none"     // REQUIRED for cross-origin cookies
-    // }
     cookie: {
-  maxAge: 1000 * 60 * 60 * 24 * 7,
-  httpOnly: true,
-  secure: false,     // 🔥 LOCAL = false
-  sameSite: "lax"    // 🔥 LOCAL = lax
-}
+      maxAge: 1000 * 60 * 60 * 24 * 7,
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax"
+    }
 
   })
 );
@@ -160,7 +154,6 @@ socketHandlers(io);
 /* ---------------- STARTUP ---------------- */
 
 async function main() {
-  console.log("POSTGRES_URI =", process.env.POSTGRES_URI);
   try {
     
     await connectDB();
@@ -169,8 +162,7 @@ async function main() {
     startCron({ runImmediately: true });
     console.log("✅ Trending cron started");
 
-    startRawgCron({ runImmediately: true });
-    console.log("✅ RAWG cron started");
+    startRawgCron({ runImmediately: false });
 
     server.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);

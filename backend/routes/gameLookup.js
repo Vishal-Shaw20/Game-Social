@@ -27,7 +27,7 @@ router.get("/:rawgId", async (req, res) => {
 
   try {
     const exists = await pg.query(
-      `SELECT 1 FROM games WHERE rawg_id = $1 LIMIT 1`,
+      `SELECT 1 FROM games WHERE id = $1 LIMIT 1`,
       [Number(rawgId)]
     );
 

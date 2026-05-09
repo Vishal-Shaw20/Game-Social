@@ -1,0 +1,9 @@
+__pycache__
+*.pyc
+.env
+.git
+recommender/artifacts/*.npy
+recommender/artifacts/*.memmap
+recommender/artifacts/*.pkl
+recommender/artifacts/faiss_index.ivf
+recommender/artifacts/bge-reranker-onnx-fp32

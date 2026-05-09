@@ -1,0 +1,42 @@
+services:
+  frontend:
+    image: ghcr.io/${REPO_OWNER:-vishal-shaw20}/gamesocial-frontend:latest
+    build: ./frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  backend:
+    image: ghcr.io/${REPO_OWNER:-vishal-shaw20}/gamesocial-backend:latest
+    build: ./backend
+    env_file: ./backend/.env
+    environment:
+      - NODE_ENV=production
+      - GAMIQ_URL=http://gamiq:8000
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  gamiq:
+    image: ghcr.io/${REPO_OWNER:-vishal-shaw20}/gamesocial-gamiq:latest
+    build: ./gamiq
+    env_file: ./gamiq/.env
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    volumes:
+      - gamiq-artifacts:/app/recommender/artifacts
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+
+volumes:
+  gamiq-artifacts:
+  redis-data:

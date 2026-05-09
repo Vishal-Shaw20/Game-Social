@@ -7,7 +7,7 @@ const HERO_HEIGHT = 220;
 function normalizeList(list) {
   return list.map(g => {
     const cover = g.cover_image || g.background_image || g.image || "";
-    const rawgId = g.rawg_id ?? g.id ?? null;
+    const rawgId = g.id ?? null;
     const title = g.title || g.name || "Unknown";
 
     return {
