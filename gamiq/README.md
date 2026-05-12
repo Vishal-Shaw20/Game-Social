@@ -79,7 +79,9 @@ The API runs on `http://localhost:8000`.
 | `DB_USER` | Yes | PostgreSQL user |
 | `DB_PASSWORD` | Yes | PostgreSQL password |
 | `RAWG_API_KEY` | Yes | Primary RAWG API key |
-| `RAWG_API_KEY_1`..`_7` | Yes | Additional keys for rate limit rotation |
+| `RAWG_API_KEY_1`..`_15` | Yes | Additional keys for rate limit rotation |
+| `PIPELINE_API_KEY` | Yes | Shared secret for `/pipeline/run` and `/games/ensure` endpoints |
+| `HF_TOKEN` | Yes | HuggingFace Inference API token (for embeddings) |
 | `REDIS_URL` | No | Redis connection URL (default: `redis://localhost:6379/0`) |
 
 ## API
@@ -107,6 +109,16 @@ Returns game recommendations for up to 3 input games.
 ```
 
 Each inner array is a row of recommended RAWG game IDs. The number of rows and games per row scales with the number of input games (1 game = 2 rows of 5, 2 games = 3 rows of 5, 3 games = 3 rows of 5).
+
+### `POST /pipeline/run`
+
+Triggers the daily ingestion pipeline as a background task. Fetches new and updated games from RAWG, embeds them, and updates the FAISS index. Requires `Authorization: Bearer {PIPELINE_API_KEY}` header.
+
+**Response:** `{"status": "started"}`
+
+### `POST /games/ensure/{rawg_id}`
+
+Ensures a single game exists in the database with full pipeline processing (fetch from RAWG, embed, add to FAISS). Used by the backend's trending route for on-demand game ingestion. Requires `Authorization: Bearer {PIPELINE_API_KEY}` header.
 
 ### `GET /health`
 
@@ -181,11 +193,27 @@ PostgreSQL with pgvector. Two main tables:
 
 ## Architecture Notes
 
-- The daily pipeline is **checkpoint-based** — safe to restart after crashes. Resumes from the last processed RAWG game ID stored in `artifacts/checkpoint.txt`.
-- RAWG API key rotation distributes requests across up to 8 keys to avoid rate limits.
+- The daily pipeline is **checkpoint-based** — safe to restart after crashes. New-game pass resumes from the last processed RAWG game ID stored in `artifacts/checkpoint.txt`. Updated-game pass resumes from the last date in `artifacts/updated_checkpoint.txt`.
+- RAWG API key rotation distributes requests across up to 16 keys to avoid rate limits.
 - Series games injected into FAISS candidates get **imputed scores** (batch minimum) so they aren't penalized by a raw `0.0` FAISS distance.
 - The reranker uses a `threading.Lock` to serialize concurrent inference calls — safe for multi-threaded use.
 - Redis cache is **best-effort** — if Redis is down, the API runs the full pipeline and returns results normally.
+
+## Deployment
+
+Docker container using Python 3.13 slim:
+
+```dockerfile
+FROM python:3.13-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+EXPOSE 8000
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+```
+
+FAISS index and ONNX reranker artifacts are mounted via a persistent Docker volume (`gamiq-artifacts`). No local ML model download at runtime — embeddings use the HuggingFace Inference API, and the reranker runs via ONNX.
 
 ## Part of GameSocial
 
