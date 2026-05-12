@@ -1,14 +1,17 @@
+import logging
 import numpy as np
 import faiss
 from recommender.config import ARTIFACTS_DIR
+
+logger = logging.getLogger(__name__)
 
 
 def main():
     embeddings = np.load(str(ARTIFACTS_DIR / "embeddings.npy"))
     ids        = np.load(str(ARTIFACTS_DIR / "ids.npy"))
 
-    print(f"Loaded embeddings: {embeddings.shape}")
-    print(f"Loaded ids:        {ids.shape}")
+    logger.info("Loaded embeddings: %s", embeddings.shape)
+    logger.info("Loaded ids:        %s", ids.shape)
 
     # -------- NORMALIZE --------
     # Applied here on the full matrix — normalizes all vectors
@@ -21,8 +24,8 @@ def main():
     dim   = embeddings.shape[1]   # auto-detected — 1024
     nlist = 4096                  # good for ~800k+ vectors
 
-    print(f"Dimension : {dim}")
-    print(f"nlist     : {nlist}")
+    logger.info("Dimension : %d", dim)
+    logger.info("nlist     : %d", nlist)
 
     # -------- SAMPLE FOR TRAINING --------
 
@@ -36,18 +39,18 @@ def main():
     quantizer  = faiss.IndexFlatIP(dim)
     base_index = faiss.IndexIVFFlat(quantizer, dim, nlist, faiss.METRIC_INNER_PRODUCT)
 
-    print("Training IVF index...")
+    logger.info("Training IVF index...")
     base_index.train(train_vecs)
 
     # Wrap with IDMap to store actual game IDs
     index = faiss.IndexIDMap(base_index)
 
-    print("Adding vectors with IDs...")
+    logger.info("Adding vectors with IDs...")
     index.add_with_ids(embeddings, ids.astype("int64"))
 
     faiss.write_index(index, str(ARTIFACTS_DIR / "faiss_index.ivf"))
 
-    print(f"Index built and saved — total vectors: {index.ntotal}")
+    logger.info("Index built and saved — total vectors: %d", index.ntotal)
 
 
 if __name__ == "__main__":

@@ -1,4 +1,5 @@
 import SteamLibrary from "../models/SteamLibraries.js";
+import logger from "../config/logger.js";
 
 export async function fetchSteamLibrary(steamId) {
 
@@ -8,7 +9,7 @@ export async function fetchSteamLibrary(steamId) {
 
   
   if (!res.ok) {
-    console.error("[SteamLib] Steam API failed");
+    logger.error("Steam API failed");
     throw new Error("Steam API failed");
   }
 
@@ -84,5 +85,5 @@ export async function triggerSteamSyncIfNeeded(userId, steamId) {
 
 
   syncSteamLibrary(userId, steamId)
-    .catch(err => console.error("[SteamLib] Steam auto-sync failed:", err));
+    .catch(err => logger.error({ err }, "Steam auto-sync failed"));
 }

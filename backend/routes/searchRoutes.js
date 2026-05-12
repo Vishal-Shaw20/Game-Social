@@ -1,9 +1,11 @@
 import express from "express";
 import { getPG } from "../config/db.js";
+import logger from "../config/logger.js";
+import { searchLimiter } from "../middleware/rateLimiter.js";
 
 const router = express.Router();
 
-router.get("/games", async (req, res) => {
+router.get("/games", searchLimiter, async (req, res) => {
   try {
     const {
       q,
@@ -68,7 +70,7 @@ router.get("/games", async (req, res) => {
     const { rows } = await pg.query(sql, values);
     res.json(rows);
   } catch (e) {
-    console.error("[SEARCH ERROR]", e);
+    logger.error({ err: e }, "search failed");
     res.status(500).json([]);
   }
 });

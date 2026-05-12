@@ -4,14 +4,14 @@ import dotenv from "dotenv";
 import { rawgToSteamAppId } from "../utils/rawgToSteam.js";
 import User from "../models/User.js";
 import { getLibraryForUser } from "../utils/getLibraryForUser.js";
+import { getSteamIdFromUser } from "../utils/getSteamIdFromUser.js";
+import { checkOwnership } from "../utils/checkOwnership.js";
 
 import SteamLibrary from "../models/SteamLibraries.js";
-// import {
-//   getMappingBySteamId,
-//   autoMatchRawg,
-//   upsertMapping
-// } from "../utils/steamRawgmap.js";
 import { getPG } from "../config/db.js";
+import logger from "../config/logger.js";
+import { searchLimiter } from "../middleware/rateLimiter.js";
+import { requireAuth } from "../middleware/requireAuth.js";
 
 dotenv.config();
 const router = express.Router();
@@ -33,20 +33,6 @@ router.get("/games/:steamid", async (req, res) => {
 });
 
 // --- RAWG ---
-// router.get("/rawg/game/:id", async (req, res) => {
-//   const gameId = req.params.id;
-
-//   try {
-//     const response = await fetch(
-//       `https://api.rawg.io/api/games/${gameId}?key=${process.env.RAWG_API_KEY}`
-//     );
-
-//     const data = await response.json();
-//     res.json(data);
-//   } catch (err) {
-//     res.status(500).json({ error: "Failed to fetch RAWG game details" });
-//   }
-// });
 router.get("/rawg/game/:id", async (req, res) => {
   const gameId = req.params.id;
 
@@ -66,12 +52,7 @@ router.get("/rawg/game/:id", async (req, res) => {
     );
 
     if (!response.ok) {
-      console.warn(
-        "[RAWG]",
-        gameId,
-        "status:",
-        response.status
-      );
+      logger.warn("RAWG %s status: %d", gameId, response.status);
 
       return res.status(response.status).json({
         error: "RAWG request failed",
@@ -83,7 +64,7 @@ router.get("/rawg/game/:id", async (req, res) => {
     return res.json(data);
 
   } catch (err) {
-    console.error("[RAWG fetch error]", err.message);
+    logger.error({ err }, "RAWG fetch error");
     return res.status(500).json({ error: "RAWG fetch failed" });
   }
 });
@@ -138,11 +119,7 @@ router.get("/riot/summoner/:name", async (req, res) => {
 
 
 
-router.get("/me/library", async (req, res) => {
-  if (!req.user) {
-    return res.status(401).json({ error: "Not authenticated" });
-  }
-
+router.get("/me/library", requireAuth, async (req, res) => {
   try {
     const data = await getLibraryForUser(req.user._id);
     res.json(data);
@@ -150,16 +127,8 @@ router.get("/me/library", async (req, res) => {
     res.status(500).json({ error: "Failed to load library" });
   }
 });
-import { getSteamIdFromUser } from "../utils/getSteamIdFromUser.js";
-
-import { checkOwnership } from "../utils/checkOwnership.js";
-
-router.get("/me/owns/:rawgId", async (req, res) => {
+router.get("/me/owns/:rawgId", requireAuth, async (req, res) => {
   try {
-    if (!req.user) {
-      return res.status(401).json({ owned: false });
-    }
-
     const { rawgId } = req.params;
 
     const owned = await checkOwnership(req.user._id, rawgId);
@@ -170,14 +139,9 @@ router.get("/me/owns/:rawgId", async (req, res) => {
   }
 });
 
-router.get("/me/game/:rawgId/stats", async (req, res) => {
-  const steamId = getSteamIdFromUser(req.user);
-  
-
+router.get("/me/game/:rawgId/stats", requireAuth, async (req, res) => {
   try {
-    if (!req.user) {
-      return res.status(401).json([]);
-    }
+    const steamId = getSteamIdFromUser(req.user);
 
     if (!steamId) {
       return res.json([]);
@@ -225,14 +189,9 @@ router.get("/me/game/:rawgId/stats", async (req, res) => {
   }
 });
 
-router.get("/me/game/:rawgId/achievements", async (req, res) => {
-  const steamId = getSteamIdFromUser(req.user);
-  
-
+router.get("/me/game/:rawgId/achievements", requireAuth, async (req, res) => {
   try {
-    if (!req.user) {
-      return res.status(401).json({});
-    }
+    const steamId = getSteamIdFromUser(req.user);
 
     if (!steamId) {
       return res.json({});
@@ -284,14 +243,9 @@ router.get("/me/game/:rawgId/achievements", async (req, res) => {
   }
 });
 
-router.get("/me/game/:rawgId/summary", async (req, res) => {
-  const steamId = getSteamIdFromUser(req.user);
-  
-
+router.get("/me/game/:rawgId/summary", requireAuth, async (req, res) => {
   try {
-    if (!req.user) {
-      return res.status(401).json({});
-    }
+    const steamId = getSteamIdFromUser(req.user);
 
     const steamAppId = await rawgToSteamAppId(req.params.rawgId);
 
@@ -351,15 +305,15 @@ router.get("/game/:rawgId/achievement-rarity", async (req, res) => {
 });
 
 // GET /api/users/search?username=har
-router.get("/users/search", async (req, res) => {
-  if (!req.user) return res.json([]);
-
+router.get("/users/search", requireAuth, searchLimiter, async (req, res) => {
   const { username } = req.query;
   if (!username || username.length < 3) return res.json([]);
 
+  const escaped = username.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
   const users = await User.find(
     {
-      username: { $regex: `^${username}`, $options: "i" },
+      username: { $regex: `^${escaped}`, $options: "i" },
       _id: { $ne: req.user._id },
     },
     { username: 1, displayName: 1, avatar: 1 }
@@ -436,7 +390,7 @@ router.get("/new-releases", async (req, res) => {
         AND released <= CURRENT_DATE
         AND background_image is not null
         AND suggestions_count is not null
-      ORDER BY released
+      ORDER BY released DESC
       LIMIT $1
       `,
       [limit]
@@ -451,7 +405,7 @@ router.get("/new-releases", async (req, res) => {
       }))
     );
   } catch (err) {
-    console.error("[api/new-releases]", err);
+    logger.error({ err }, "new-releases query failed");
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -501,7 +455,7 @@ router.get("/gsrecommended", async (req, res) => {
       }))
     );
   } catch (err) {
-    console.error("[api/gsrecommended]", err);
+    logger.error({ err }, "gsrecommended query failed");
     res.status(500).json({ error: "Internal server error" });
   }
 });

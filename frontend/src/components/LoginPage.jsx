@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import styles from "./LoginPage.module.css";
 
 function LoginPage() {
   const navigate = useNavigate();
@@ -10,6 +11,7 @@ function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
   const [error, setError] = useState("");
+  const [retryAfter, setRetryAfter] = useState(0);
   const [message, setMessage] = useState("");
 
   const [formData, setFormData] = useState({
@@ -57,6 +59,28 @@ function LoginPage() {
     return () => controller.abort();
   }, [navigate]);
 
+  useEffect(() => {
+    if (retryAfter <= 0) return;
+    const id = setInterval(() => {
+      setRetryAfter((prev) => {
+        if (prev <= 1) {
+          clearInterval(id);
+          setError("");
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, [retryAfter]);
+
+  const checkRateLimit = (response) => {
+    if (response.status === 429) {
+      const secs = parseInt(response.headers.get("Retry-After") || "0");
+      if (secs > 0) setRetryAfter(secs);
+    }
+  };
+
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
@@ -76,7 +100,10 @@ function LoginPage() {
       });
 
       const data = await response.json();
-      if (!response.ok) throw new Error(data.message || "Failed to send OTP");
+      if (!response.ok) {
+        checkRateLimit(response);
+        throw new Error(data.error || data.message || "Failed to send OTP");
+      }
 
       setOtpSent(true);
       setMessage("OTP sent to your email. Please verify.");
@@ -102,7 +129,10 @@ function LoginPage() {
       });
 
       const data = await response.json();
-      if (!response.ok) throw new Error(data.message || "OTP verification failed");
+      if (!response.ok) {
+        checkRateLimit(response);
+        throw new Error(data.error || data.message || "OTP verification failed");
+      }
 
       navigate("/dashboard", { replace: true });
     } catch (err) {
@@ -127,7 +157,10 @@ function LoginPage() {
       });
 
       const data = await response.json();
-      if (!response.ok) throw new Error(data.message || "Login failed");
+      if (!response.ok) {
+        checkRateLimit(response);
+        throw new Error(data.error || data.message || "Login failed");
+      }
 
       navigate("/dashboard", { replace: true });
     } catch (err) {
@@ -152,7 +185,10 @@ function LoginPage() {
       });
 
       const data = await response.json();
-      if (!response.ok) throw new Error(data.message || "Failed to send OTP");
+      if (!response.ok) {
+        checkRateLimit(response);
+        throw new Error(data.error || data.message || "Failed to send OTP");
+      }
 
       setOtpSent(true);
       setMessage("OTP sent to your email for password reset.");
@@ -182,7 +218,10 @@ function LoginPage() {
       });
 
       const data = await response.json();
-      if (!response.ok) throw new Error(data.message || "Password reset failed");
+      if (!response.ok) {
+        checkRateLimit(response);
+        throw new Error(data.error || data.message || "Password reset failed");
+      }
 
       setMessage("Password reset successful. You can now login.");
       setIsForgotPassword(false);
@@ -200,8 +239,8 @@ function LoginPage() {
 
   if (checkingSession) {
     return (
-      <div className="auth-container">
-        <div className="auth-card">
+      <div className={styles.authContainer}>
+        <div className={styles.authCard}>
           <h2>Checking session...</h2>
         </div>
       </div>
@@ -209,8 +248,8 @@ function LoginPage() {
   }
 
   return (
-    <div className="auth-container">
-      <div className="auth-card">
+    <div className={styles.authContainer}>
+      <div className={styles.authCard}>
         <h2>
           {isForgotPassword
             ? "Reset Password"
@@ -253,7 +292,7 @@ function LoginPage() {
               onChange={handleChange}
               required
             />
-            <button type="submit" disabled={loading}>
+            <button type="submit" disabled={loading || retryAfter > 0}>
               {loading ? "Sending OTP..." : "Send OTP"}
             </button>
           </form>
@@ -277,12 +316,12 @@ function LoginPage() {
               onChange={handleChange}
               required
             />
-            <button type="submit" disabled={loading}>
+            <button type="submit" disabled={loading || retryAfter > 0}>
               {loading ? "Logging in..." : "Login"}
             </button>
 
             <p
-              className="toggle-text"
+              className={styles.toggleText}
               onClick={() => {
                 setIsForgotPassword(true);
                 setError("");
@@ -304,7 +343,7 @@ function LoginPage() {
               onChange={(e) => setOtp(e.target.value)}
               required
             />
-            <button type="submit" disabled={loading}>
+            <button type="submit" disabled={loading || retryAfter > 0}>
               {loading ? "Verifying..." : "Verify OTP"}
             </button>
           </form>
@@ -320,7 +359,7 @@ function LoginPage() {
               onChange={handleChange}
               required
             />
-            <button type="submit" disabled={loading}>
+            <button type="submit" disabled={loading || retryAfter > 0}>
               {loading ? "Sending OTP..." : "Send OTP"}
             </button>
           </form>
@@ -344,21 +383,30 @@ function LoginPage() {
               onChange={handleChange}
               required
             />
-            <button type="submit" disabled={loading}>
+            <button type="submit" disabled={loading || retryAfter > 0}>
               {loading ? "Resetting..." : "Reset Password"}
             </button>
           </form>
         )}
 
-        {message && <p className="success-text">{message}</p>}
-        {error && <p className="error-text">{error}</p>}
+        {message && <p className={styles.successText}>{message}</p>}
+        {error && (
+          <p className={styles.errorText}>
+            {error}
+            {retryAfter > 0 && (
+              <span style={{ display: "block", marginTop: "4px", fontWeight: 600 }}>
+                Try again in {Math.floor(retryAfter / 60)}:{String(retryAfter % 60).padStart(2, "0")}
+              </span>
+            )}
+          </p>
+        )}
 
         {!isForgotPassword && (
           <>
-            <div className="divider">
+            <div className={styles.divider}>
               <span>OR</span>
             </div>
-            <div className="social-buttons">
+            <div className={styles.socialButtons}>
               <button onClick={() => handleSocialLogin("google")}>
                 Login with Google
               </button>
@@ -380,199 +428,11 @@ function LoginPage() {
             setMessage("");
             setIsForgotPassword(false);
           }}
-          className="toggle-text"
+          className={styles.toggleText}
         >
           {isSignup ? "Already have an account? Login here" : "Don't have an account? Sign up here"}
         </p>
       </div>
-
-      <style jsx>{`
-        .auth-container {
-          min-height: 100vh;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: var(--space-6);
-          background: var(--color-bg-primary);
-        }
-
-        .auth-card {
-          width: 100%;
-          max-width: 420px;
-          background: var(--color-bg-elevated);
-          border: 1px solid var(--color-border-primary);
-          border-radius: var(--radius-2xl);
-          padding: var(--space-8);
-          box-shadow: var(--shadow-xl);
-          backdrop-filter: blur(20px);
-        }
-
-        .auth-card h2 {
-          font-size: var(--text-3xl);
-          font-weight: var(--weight-bold);
-          margin: 0 0 var(--space-8) 0;
-          text-align: center;
-          color: var(--color-text-primary);
-        }
-
-        .auth-card form {
-          display: flex;
-          flex-direction: column;
-          gap: var(--space-4);
-        }
-
-        .auth-card input {
-          width: 100%;
-          padding: var(--space-3) var(--space-4);
-          background: var(--color-bg-secondary);
-          border: 1px solid var(--color-border-primary);
-          border-radius: var(--radius-md);
-          color: var(--color-text-primary);
-          font-size: var(--text-base);
-          transition: all var(--transition-base);
-        }
-
-        .auth-card input:focus {
-          border-color: var(--color-border-focus);
-          box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.1);
-        }
-
-        .auth-card input::placeholder {
-          color: var(--color-text-muted);
-        }
-
-        .auth-card button[type="submit"] {
-          width: 100%;
-          padding: var(--space-3) var(--space-5);
-          background: var(--color-accent-primary);
-          border: none;
-          border-radius: var(--radius-md);
-          color: white;
-          font-size: var(--text-base);
-          font-weight: var(--weight-semibold);
-          cursor: pointer;
-          transition: all var(--transition-base);
-          margin-top: var(--space-2);
-        }
-
-        .auth-card button[type="submit"]:hover:not(:disabled) {
-          background: var(--color-accent-primary-hover);
-          transform: translateY(-2px);
-          box-shadow: 0 4px 12px rgba(96, 165, 250, 0.3);
-        }
-
-        .auth-card button[type="submit"]:active:not(:disabled) {
-          transform: translateY(0);
-        }
-
-        .auth-card button[type="submit"]:disabled {
-          opacity: 0.6;
-          cursor: not-allowed;
-          transform: none;
-        }
-
-        .auth-card button[type="submit"]:focus-visible {
-          outline: 2px solid var(--color-border-focus);
-          outline-offset: 2px;
-        }
-
-        .toggle-text {
-          cursor: pointer;
-          margin-top: var(--space-4);
-          text-align: center;
-          font-size: var(--text-sm);
-          color: var(--color-accent-primary);
-          transition: color var(--transition-base);
-        }
-
-        .toggle-text:hover {
-          color: var(--color-accent-primary-hover);
-          text-decoration: underline;
-        }
-
-        .success-text {
-          margin-top: var(--space-4);
-          padding: var(--space-3) var(--space-4);
-          background: var(--color-success-bg);
-          border: 1px solid rgba(46, 160, 67, 0.3);
-          border-radius: var(--radius-md);
-          color: var(--color-success);
-          font-size: var(--text-sm);
-          text-align: center;
-          line-height: var(--leading-relaxed);
-        }
-
-        .error-text {
-          margin-top: var(--space-4);
-          padding: var(--space-3) var(--space-4);
-          background: var(--color-error-bg);
-          border: 1px solid rgba(248, 81, 73, 0.3);
-          border-radius: var(--radius-md);
-          color: var(--color-error);
-          font-size: var(--text-sm);
-          text-align: center;
-          line-height: var(--leading-relaxed);
-        }
-
-        .divider {
-          display: flex;
-          align-items: center;
-          margin: var(--space-6) 0;
-          text-align: center;
-        }
-
-        .divider::before,
-        .divider::after {
-          content: "";
-          flex: 1;
-          height: 1px;
-          background: var(--color-border-primary);
-        }
-
-        .divider span {
-          padding: 0 var(--space-4);
-          font-size: var(--text-xs);
-          font-weight: var(--weight-semibold);
-          color: var(--color-text-tertiary);
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-        }
-
-        .social-buttons {
-          display: flex;
-          flex-direction: column;
-          gap: var(--space-3);
-        }
-
-        .social-buttons button {
-          width: 100%;
-          padding: var(--space-3) var(--space-5);
-          background: var(--color-bg-secondary);
-          border: 1px solid var(--color-border-primary);
-          border-radius: var(--radius-md);
-          color: var(--color-text-primary);
-          font-size: var(--text-sm);
-          font-weight: var(--weight-medium);
-          cursor: pointer;
-          transition: all var(--transition-base);
-        }
-
-        .social-buttons button:hover {
-          background: var(--color-bg-tertiary);
-          border-color: var(--color-border-focus);
-          transform: translateY(-2px);
-          box-shadow: var(--shadow-md);
-        }
-
-        .social-buttons button:active {
-          transform: translateY(0);
-        }
-
-        .social-buttons button:focus-visible {
-          outline: 2px solid var(--color-border-focus);
-          outline-offset: 2px;
-        }
-      `}</style>
     </div>
   );
 }

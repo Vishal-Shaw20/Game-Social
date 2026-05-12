@@ -1,0 +1,191 @@
+.reviewSection {
+  margin-top: 48px;
+}
+
+.reviewSection h2 {
+  font-size: 24px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.reviewCount {
+  font-size: 13px;
+  opacity: 0.6;
+  margin-bottom: 20px;
+}
+
+.reviewList {
+  display: grid;
+  gap: 20px;
+}
+
+.reviewCard {
+  background: rgba(255,255,255,0.04);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 28px;
+  padding: 24px;
+  transition: all 0.25s ease;
+}
+
+.reviewCard:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 16px 48px rgba(0,0,0,0.35);
+}
+
+.verdictPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  background: linear-gradient(
+    135deg,
+    rgba(255,255,255,0.25),
+    rgba(255,255,255,0.05)
+  );
+  border: 1px solid rgba(255,255,255,0.18);
+  backdrop-filter: blur(6px);
+  margin-bottom: 6px;
+}
+
+.reviewMeta {
+  font-size: 11px;
+  opacity: 0.6;
+  margin-bottom: 10px;
+}
+
+.reviewCard h4 {
+  font-size: 18px;
+  margin: 10px 0 6px;
+}
+
+.reviewCard p {
+  opacity: 0.85;
+  line-height: 1.65;
+}
+
+.likeBtn {
+  margin-top: 12px;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 12px;
+  backdrop-filter: blur(6px);
+  transition: all 0.2s ease;
+  color: inherit;
+  cursor: pointer;
+}
+
+.liked {
+  background: rgba(248,81,73,0.15);
+  border-color: rgba(248,81,73,0.6);
+  color: #f85149;
+}
+
+.reviewActions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.reviewActions button {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 12px;
+  color: inherit;
+  cursor: pointer;
+}
+
+.writeReview {
+  margin-top: 40px;
+  background: rgba(255,255,255,0.04);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 32px;
+  padding: 28px;
+}
+
+.writeReview h3 {
+  font-size: 22px;
+  margin-bottom: 20px;
+}
+
+.verdictPicker {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin: 20px 0 28px;
+}
+
+.verdictPicker button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 52px;
+  padding: 0 22px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 500;
+  color: rgba(255,255,255,0.75);
+  backdrop-filter: blur(10px);
+  transition: all 0.25s ease;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.verdictPicker svg {
+  flex-shrink: 0;
+  stroke-width: 2.2;
+}
+
+.verdictActive {
+  background: linear-gradient(
+    135deg,
+    rgba(255,255,255,0.18),
+    rgba(255,255,255,0.06)
+  ) !important;
+  border-color: currentColor !important;
+  box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 40%, transparent);
+  color: white !important;
+}
+
+.submitBtn {
+  background: linear-gradient(
+    135deg,
+    rgba(46,160,67,0.9),
+    rgba(46,160,67,0.6)
+  );
+  border: none;
+  border-radius: 999px;
+  padding: 10px 24px;
+  font-size: 13px;
+  font-weight: 600;
+  margin-right: 10px;
+  color: white;
+  cursor: pointer;
+}
+
+.submitBtn:disabled {
+  background: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.4);
+}
+
+.cancelBtn {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 999px;
+  padding: 10px 24px;
+  font-size: 13px;
+  font-weight: 600;
+  color: inherit;
+  cursor: pointer;
+}

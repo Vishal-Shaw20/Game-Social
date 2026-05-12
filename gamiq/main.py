@@ -1,11 +1,49 @@
+import asyncio
+import json
 import logging
 import os
+import sys
 
 from fastapi import FastAPI, Request, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from recommender.api import router as recommender_router
 from recommender.daily_pipeline import run_daily_pipeline, ensure_game
+
+
+class JSONFormatter(logging.Formatter):
+    def format(self, record):
+        log_record = {
+            "time": self.formatTime(record, self.datefmt),
+            "level": record.levelname.lower(),
+            "msg": record.getMessage(),
+            "logger": record.name,
+        }
+        if record.exc_info and record.exc_info[0]:
+            log_record["error"] = self.formatException(record.exc_info)
+        return json.dumps(log_record)
+
+
+def setup_logging():
+    is_dev = os.getenv("ENV", "production") != "production"
+
+    handler = logging.StreamHandler(sys.stdout)
+    if is_dev:
+        handler.setFormatter(
+            logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+        )
+    else:
+        handler.setFormatter(JSONFormatter())
+
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    root.addHandler(handler)
+
+    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+
+
+setup_logging()
 
 logger = logging.getLogger("gamiq")
 
@@ -18,7 +56,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["POST"],
+    allow_methods=["GET", "POST"],
     allow_headers=["Content-Type"],
 )
 
@@ -34,6 +72,7 @@ def health():
     return {"status": "ok"}
 
 
+_pipeline_lock = asyncio.Lock()
 _pipeline_running = False
 
 @app.post("/pipeline/run")
@@ -46,9 +85,10 @@ async def trigger_pipeline(request: Request, background_tasks: BackgroundTasks):
         return JSONResponse(status_code=401, content={"error": "Unauthorized"})
 
     global _pipeline_running
-    if _pipeline_running:
-        return {"status": "already_running"}
-    _pipeline_running = True
+    async with _pipeline_lock:
+        if _pipeline_running:
+            return {"status": "already_running"}
+        _pipeline_running = True
 
     def _run():
         global _pipeline_running

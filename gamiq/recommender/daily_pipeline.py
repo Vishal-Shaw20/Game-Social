@@ -1,8 +1,9 @@
 import json
+import logging
 import psycopg2
 import numpy as np
 import faiss
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from recommender.embedder import encode_texts
 from psycopg2.extras import execute_values
 from pgvector.psycopg2 import register_vector
@@ -11,6 +12,8 @@ from recommender.config import DB_CONFIG, ARTIFACTS_DIR
 from recommender.rawg_client import rawg_get, fetch_series_for_game
 from recommender.text_builder import build_structured_text as _build_text
 from recommender.cache import clear_all as clear_recommendation_cache
+
+logger = logging.getLogger(__name__)
 
 # ============================================================
 # -------------------- ENV CONFIG ----------------------------
@@ -68,8 +71,7 @@ def load_checkpoint():
             val = f.read().strip()
             return int(val) if val else None
 
-    # No checkpoint file — use the highest game ID in DB as baseline
-    print("No checkpoint file. Using MAX(id) from DB as baseline...")
+    logger.info("No checkpoint file. Using MAX(id) from DB as baseline")
     conn = psycopg2.connect(**DB_CONFIG)
     cur  = conn.cursor()
     cur.execute("SELECT COALESCE(MAX(id), 0) FROM games;")
@@ -78,13 +80,13 @@ def load_checkpoint():
     conn.close()
 
     save_checkpoint(max_id)
-    print(f"Baseline set to MAX game ID in DB: {max_id}")
+    logger.info("Baseline set to MAX game ID in DB: %s", max_id)
     return max_id
 
 def save_checkpoint(game_id: int):
     with open(CHECKPOINT_PATH, "w") as f:
         f.write(str(game_id))
-    print(f"Checkpoint saved: {game_id}")
+    logger.info("Checkpoint saved: %s", game_id)
 
 # ============================================================
 # -------------------- UPDATED CHECKPOINT --------------------
@@ -96,12 +98,12 @@ def load_updated_checkpoint():
             val = f.read().strip()
             if val:
                 return val
-    return (datetime.utcnow() - timedelta(days=2)).strftime("%Y-%m-%d")
+    return (datetime.now(timezone.utc) - timedelta(days=2)).strftime("%Y-%m-%d")
 
 def save_updated_checkpoint(date_str: str):
     with open(UPDATED_CHECKPOINT_PATH, "w") as f:
         f.write(date_str)
-    print(f"Updated checkpoint saved: {date_str}")
+    logger.info("Updated checkpoint saved: %s", date_str)
 
 # ============================================================
 # -------------------- DB INSERTS ----------------------------
@@ -216,13 +218,13 @@ def fetch_new_game_ids(checkpoint_id):
     first_id = None
 
     while page <= MAX_PAGES:
-        print(f"Fetching RAWG page {page}")
+        logger.info("Fetching RAWG page %d", page)
 
         url      = f"{RAWG_BASE}?ordering=-created&page={page}"
         response = rawg_get(url)
 
         if response is None or response.status_code != 200:
-            print("RAWG request failed")
+            logger.error("RAWG request failed")
             break
 
         data    = response.json()
@@ -238,7 +240,7 @@ def fetch_new_game_ids(checkpoint_id):
                 first_id = gid
 
             if gid == checkpoint_id:
-                print(f"Reached checkpoint ID {checkpoint_id}. Stop.")
+                logger.info("Reached checkpoint ID %s. Stop.", checkpoint_id)
                 return new_ids, first_id
 
             new_ids.append(gid)
@@ -246,24 +248,24 @@ def fetch_new_game_ids(checkpoint_id):
         page += 1
 
     if page > MAX_PAGES:
-        print(f"Warning: hit MAX_PAGES ({MAX_PAGES}) limit.")
+        logger.warning("Hit MAX_PAGES (%d) limit", MAX_PAGES)
 
     return new_ids, first_id
 
 
 def fetch_updated_game_ids(since_date: str):
-    today = datetime.utcnow().strftime("%Y-%m-%d")
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     page = 1
     updated_ids = []
 
     while page <= MAX_PAGES:
-        print(f"Fetching RAWG updated page {page}")
+        logger.info("Fetching RAWG updated page %d", page)
 
         url = f"{RAWG_BASE}?ordering=-updated&dates={since_date},{today}&page={page}"
         response = rawg_get(url)
 
         if response is None or response.status_code != 200:
-            print("RAWG updated request failed")
+            logger.error("RAWG updated request failed")
             break
 
         data = response.json()
@@ -306,7 +308,7 @@ def update_faiss(new_ids: list, new_vectors: list):
     """
 
     if not FAISS_INDEX_PATH.exists():
-        print("FAISS index missing — skipping FAISS update.")
+        logger.info("FAISS index missing — skipping FAISS update")
         return
 
     index = faiss.read_index(str(FAISS_INDEX_PATH))
@@ -318,7 +320,7 @@ def update_faiss(new_ids: list, new_vectors: list):
     # IndexIDMap wraps inner IVFFlat — add_with_ids works correctly on IDMap
     index.add_with_ids(vectors, ids)
     faiss.write_index(index, str(FAISS_INDEX_PATH))
-    print(f"FAISS updated — added {len(new_ids)} vectors.")
+    logger.info("FAISS updated — added %d vectors", len(new_ids))
 
 # ============================================================
 # -------------------- SINGLE GAME ENSURE --------------------
@@ -330,67 +332,64 @@ def ensure_game(rawg_id: int) -> dict:
         with conn.cursor() as cur:
             cur.execute("SELECT 1 FROM games WHERE id = %s", [rawg_id])
             if cur.fetchone():
-                conn.close()
                 return {"status": "exists"}
 
         g = fetch_game_details(rawg_id)
         if not g:
-            conn.close()
             return {"status": "not_found_on_rawg"}
 
-        game_row = [(
-            clean_int(g.get("id")),
-            clean_text(g.get("slug")),
-            clean_text(g.get("name")),
-            clean_text(g.get("name_original")),
-            clean_text(g.get("description")),
-            clean_text(g.get("description_raw")),
-            clean_text(g.get("released")),
-            clean_text(g.get("background_image")),
-            clean_text(g.get("background_image_additional")),
-            clean_int(g.get("suggestions_count")),
-            extract_platforms(g.get("platforms")),
-            extract_names(g.get("developers")),
-            extract_names(g.get("publishers")),
-            extract_names(g.get("genres")),
-            extract_names(g.get("tags")),
-            json.dumps(g.get("esrb_rating")) if g.get("esrb_rating") else None,
-            clean_text(g.get("website")),
-            clean_int(g.get("screenshots_count")),
-            clean_int(g.get("achievements_count")),
-            clean_int(g.get("game_series_count")),
-            clean_int(g.get("additions_count")),
-            clean_int(g.get("parents_count")),
-            extract_names(g.get("alternative_names")),
-            g.get("rating") or 0.0,
-            clean_int(g.get("ratings_count")),
-            clean_int(g.get("metacritic")),
-        )]
+        with conn:
+            game_row = [(
+                clean_int(g.get("id")),
+                clean_text(g.get("slug")),
+                clean_text(g.get("name")),
+                clean_text(g.get("name_original")),
+                clean_text(g.get("description")),
+                clean_text(g.get("description_raw")),
+                clean_text(g.get("released")),
+                clean_text(g.get("background_image")),
+                clean_text(g.get("background_image_additional")),
+                clean_int(g.get("suggestions_count")),
+                extract_platforms(g.get("platforms")),
+                extract_names(g.get("developers")),
+                extract_names(g.get("publishers")),
+                extract_names(g.get("genres")),
+                extract_names(g.get("tags")),
+                json.dumps(g.get("esrb_rating")) if g.get("esrb_rating") else None,
+                clean_text(g.get("website")),
+                clean_int(g.get("screenshots_count")),
+                clean_int(g.get("achievements_count")),
+                clean_int(g.get("game_series_count")),
+                clean_int(g.get("additions_count")),
+                clean_int(g.get("parents_count")),
+                extract_names(g.get("alternative_names")),
+                g.get("rating") or 0.0,
+                clean_int(g.get("ratings_count")),
+                clean_int(g.get("metacritic")),
+            )]
 
-        insert_games_batch(conn, game_row)
+            insert_games_batch(conn, game_row)
 
-        text = build_structured_text(g)
-        embedding = encode_texts([text])
+            text = build_structured_text(g)
+            embedding = encode_texts([text])
 
-        insert_embeddings_batch(conn, [(rawg_id, embedding[0].tolist())])
+            insert_embeddings_batch(conn, [(rawg_id, embedding[0].tolist())])
+
+            if (g.get("game_series_count") or 0) > 0:
+                series_ids = fetch_series_for_game(rawg_id)
+                if series_ids:
+                    series_rows = []
+                    for mid in series_ids:
+                        series_rows.append((rawg_id, mid))
+                        series_rows.append((mid, rawg_id))
+                    insert_series_batch(conn, series_rows)
+
         update_faiss([rawg_id], [embedding[0]])
-
-        if (g.get("game_series_count") or 0) > 0:
-            series_ids = fetch_series_for_game(rawg_id)
-            if series_ids:
-                series_rows = []
-                for mid in series_ids:
-                    series_rows.append((rawg_id, mid))
-                    series_rows.append((mid, rawg_id))
-                insert_series_batch(conn, series_rows)
-
-        conn.close()
         clear_recommendation_cache()
         return {"status": "created", "name": g.get("name")}
 
-    except Exception as e:
+    finally:
         conn.close()
-        raise e
 
 # ============================================================
 # -------------------- MAIN DAILY PIPELINE -------------------
@@ -400,19 +399,19 @@ CHUNK_SIZE = 50
 
 def run_daily_pipeline():
 
-    print("Starting daily pipeline...")
+    logger.info("Starting daily pipeline")
 
     conn = psycopg2.connect(**DB_CONFIG)
 
     checkpoint_id = load_checkpoint()
-    print(f"Checkpoint ID: {checkpoint_id}")
+    logger.info("Checkpoint ID: %s", checkpoint_id)
 
     new_ids, first_id = fetch_new_game_ids(checkpoint_id)
 
     if not new_ids:
-        print("No new games.")
+        logger.info("No new games")
     else:
-        print(f"Found {len(new_ids)} new games")
+        logger.info("Found %d new games", len(new_ids))
 
         ordered_ids = list(reversed(new_ids))  # oldest first
 
@@ -429,9 +428,9 @@ def run_daily_pipeline():
                 if result:
                     games[gid] = result
                 else:
-                    print(f"Skipped game {gid} (fetch failed)")
+                    logger.warning("Skipped game %s (fetch failed)", gid)
 
-        print(f"Fetched {len(games)} game details")
+        logger.info("Fetched %d game details", len(games))
 
         # -------- Parallel fetch series + insert bidirectional mappings --------
         series_games = [gid for gid in games if (games[gid].get("game_series_count") or 0) > 0]
@@ -460,7 +459,7 @@ def run_daily_pipeline():
                     series_rows.append((gid, gid))
 
             insert_series_batch(conn, series_rows)
-            print(f"Inserted series mappings for {len(series_games)} games")
+            logger.info("Inserted series mappings for %d games", len(series_games))
 
         # -------- Process in chunks --------
         valid_ids = [gid for gid in ordered_ids if gid in games]
@@ -530,7 +529,7 @@ def run_daily_pipeline():
                 all_faiss_ids.extend(chunk_game_ids)
                 all_faiss_vectors.extend(list(embeddings))
 
-            print(f"Committed chunk {i // CHUNK_SIZE + 1}: {len(chunk_ids)} games")
+            logger.info("Committed chunk %d: %d games", i // CHUNK_SIZE + 1, len(chunk_ids))
 
         # -------- Single FAISS update (prevents duplicate IDs on crash) --------
         if all_faiss_ids:
@@ -543,16 +542,16 @@ def run_daily_pipeline():
     # -------- PASS 2: Updated games (ordering=-updated) --------
     # ============================================================
 
-    print("\n--- Pass 2: Checking for updated games ---")
+    logger.info("--- Pass 2: Checking for updated games ---")
 
     since_date = load_updated_checkpoint()
-    today = datetime.utcnow().strftime("%Y-%m-%d")
-    print(f"Fetching games updated since {since_date}")
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    logger.info("Fetching games updated since %s", since_date)
 
     updated_ids = fetch_updated_game_ids(since_date)
 
     if updated_ids:
-        print(f"Found {len(updated_ids)} updated games")
+        logger.info("Found %d updated games", len(updated_ids))
 
         # Fetch old descriptions to detect changes
         with conn.cursor() as cur:
@@ -575,7 +574,7 @@ def run_daily_pipeline():
                 if result:
                     updated_games[gid] = result
 
-        print(f"Fetched {len(updated_games)} updated game details")
+        logger.info("Fetched %d updated game details", len(updated_games))
 
         upd_faiss_ids = []
         upd_faiss_vectors = []
@@ -640,19 +639,19 @@ def run_daily_pipeline():
                 upd_faiss_ids.extend(re_embed_ids)
                 upd_faiss_vectors.extend(list(embeddings))
 
-            print(f"Updated chunk {i // CHUNK_SIZE + 1}: {len(chunk_ids)} games, {len(re_embed_ids)} re-embedded")
+            logger.info("Updated chunk %d: %d games, %d re-embedded", i // CHUNK_SIZE + 1, len(chunk_ids), len(re_embed_ids))
 
         if upd_faiss_ids:
             update_faiss(upd_faiss_ids, upd_faiss_vectors)
 
     else:
-        print("No updated games found.")
+        logger.info("No updated games found")
 
     save_updated_checkpoint(today)
 
     conn.close()
     clear_recommendation_cache()
-    print("Daily pipeline completed.")
+    logger.info("Daily pipeline completed")
 
 # ============================================================
 

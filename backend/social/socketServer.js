@@ -1,6 +1,7 @@
 // social/socketServer.js
 
 import { attachTextHandlers } from "./socketTextHandlers.js";
+import logger from "../config/logger.js";
 // Voice chat fully removed
 
 /**
@@ -11,10 +12,10 @@ export default function socketServer(io) {
     // Attach text chat handlers only
     attachTextHandlers(io, socket);
 
-    console.log("A user connected:", socket.id);
+    logger.debug("Socket connected: %s", socket.id);
 
     socket.on("disconnect", () => {
-      console.log("User disconnected:", socket.id);
+      logger.debug("Socket disconnected: %s", socket.id);
     });
   });
 }

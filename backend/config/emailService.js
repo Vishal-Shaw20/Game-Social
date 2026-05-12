@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
 import dotenv from "dotenv";
+import logger from "./logger.js";
 dotenv.config();
 
 const transporter = nodemailer.createTransport({
@@ -20,9 +21,9 @@ export async function sendOtpEmail(to, otp) {
 
   try {
     await transporter.sendMail(mailOptions);
-    console.log("✅ OTP email sent to:", to);
+    logger.info("OTP email sent to: %s", to);
   } catch (err) {
-    console.error("❌ Failed to send OTP email:", err);
+    logger.error({ err }, "Failed to send OTP email");
     throw new Error("Email sending failed");
   }
 }

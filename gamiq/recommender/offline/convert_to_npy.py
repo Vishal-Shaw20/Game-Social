@@ -1,7 +1,10 @@
+import logging
 import numpy as np
 import pickle
 import os
 from recommender.config import ARTIFACTS_DIR
+
+logger = logging.getLogger(__name__)
 
 EMB_DIM = 1024    # changed from 384 — bge-large-en-v1.5 is 1024 dims
 
@@ -17,7 +20,7 @@ def main():
     # float32 = 4 bytes
     TOTAL_ROWS = file_size // (4 * EMB_DIM)
 
-    print(f"Detected rows: {TOTAL_ROWS}")
+    logger.info("Detected rows: %d", TOTAL_ROWS)
 
     # -------- LOAD MEMMAP FILES --------
 
@@ -47,7 +50,7 @@ def main():
 
     np.save(str(ARTIFACTS_DIR / "titles.npy"), np.array(titles, dtype=object))
 
-    print("Conversion to NPY completed.")
+    logger.info("Conversion to NPY completed.")
 
 
 if __name__ == "__main__":

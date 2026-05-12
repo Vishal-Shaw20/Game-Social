@@ -1,4 +1,5 @@
 import Activity from "../models/Activity.js";
+import logger from "../config/logger.js";
 
 export async function deleteActivity({
   userId,
@@ -14,6 +15,6 @@ export async function deleteActivity({
       entityId
     });
   } catch (e) {
-    console.error("[DELETE ACTIVITY]", e);
+    logger.error({ err: e }, "delete activity failed");
   }
 }

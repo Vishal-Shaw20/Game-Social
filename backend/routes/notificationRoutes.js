@@ -1,11 +1,12 @@
 import express from "express";
 import Notification from "../models/Notification.js";
+import { requireAuth } from "../middleware/requireAuth.js";
 
 const router = express.Router();
 
-router.get("/", async (req, res) => {
-  if (!req.user) return res.status(401).json([]);
+router.use(requireAuth);
 
+router.get("/", async (req, res) => {
   const notifications = await Notification.find({
     userId: req.user._id
   })
@@ -17,8 +18,6 @@ router.get("/", async (req, res) => {
 });
 
 router.post("/:id/read", async (req, res) => {
-  if (!req.user) return res.sendStatus(401);
-
   await Notification.updateOne(
     { _id: req.params.id, userId: req.user._id },
     { $set: { read: true } }

@@ -4,6 +4,7 @@ import ReviewComments from "./ReviewComments";
 import TagSelector from "./TagSelector";
 import { PRO_TAGS, CON_TAGS } from "../shared/reviewTags";
 import MentionInput from "../MentionInput";
+import styles from "./GameReviews.module.css";
 
 import {
   Crown,
@@ -51,6 +52,7 @@ export default function GameReviews({
   currentUserId
 }) {
   const [editingReviewId, setEditingReviewId] = React.useState(null);
+  const [error, setError] = React.useState(null);
 
   const isMine = r => String(r.userId) === String(currentUserId);
   const isLikedByMe = r =>
@@ -73,6 +75,13 @@ export default function GameReviews({
       body: JSON.stringify(myReview)
     });
 
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error || "Something went wrong");
+      return;
+    }
+
+    setError(null);
     const saved = await res.json();
 
     setReviews(prev =>
@@ -86,26 +95,28 @@ export default function GameReviews({
   };
 
   return (
-    <div className="review-section">
+    <div className={styles.reviewSection}>
       <h2>Community Reviews</h2>
 
-      <div className="review-count">
+      {error && <p style={{ color: "#f85149", margin: "0.5rem 0" }}>{error}</p>}
+
+      <div className={styles.reviewCount}>
         {reviews.length} community review{reviews.length !== 1 && "s"}
       </div>
 
-      <div className="review-list">
+      <div className={styles.reviewList}>
         {reviews.map(r => {
           const V = VERDICTS[r.verdict];
           const VerdictIcon = V.Icon;
 
           return (
-            <div key={r._id} className="review-card">
-              <div className="verdict-pill" style={{ color: V.color }}>
+            <div key={r._id} className={styles.reviewCard}>
+              <div className={styles.verdictPill} style={{ color: V.color }}>
                 <VerdictIcon size={14} />
                 {V.label}
               </div>
 
-              <div className="review-meta">
+              <div className={styles.reviewMeta}>
                 Played {r.playtimeHours ?? "?"} hrs
                 {r.completed && (
                   <>
@@ -119,14 +130,20 @@ export default function GameReviews({
               {r.body && <p>{r.body}</p>}
 
               <button
-                className={`like-btn ${isLikedByMe(r) ? "liked" : ""}`}
+                className={`${styles.likeBtn} ${isLikedByMe(r) ? styles.liked : ""}`}
                 onClick={async () => {
                   const liked = isLikedByMe(r);
 
-                  await fetch(
+                  const res = await fetch(
                     `${import.meta.env.VITE_API_URL}/api/reviews/${r._id}/${liked ? "unlike" : "like"}`,
                     { method: "POST", credentials: "include" }
                   );
+
+                  if (!res.ok) {
+                    const data = await res.json().catch(() => ({}));
+                    setError(data.error || "Something went wrong");
+                    return;
+                  }
 
                   setReviews(prev =>
                     prev.map(rv =>
@@ -154,11 +171,11 @@ export default function GameReviews({
                     <Heart size={14} /> Like
                   </>
                 )}
-                <span className="like-count">{r.likes.length}</span>
+                <span className={styles.likeCount}>{r.likes.length}</span>
               </button>
 
               {isMine(r) && (
-                <div className="review-actions">
+                <div className={styles.reviewActions}>
                   <button
                     onClick={() => {
                       setEditingReviewId(r._id);
@@ -179,10 +196,16 @@ export default function GameReviews({
                     onClick={async () => {
                       if (!window.confirm("Delete this review?")) return;
 
-                      await fetch(
+                      const res = await fetch(
                         `${import.meta.env.VITE_API_URL}/api/reviews/${r._id}`,
                         { method: "DELETE", credentials: "include" }
                       );
+
+                      if (!res.ok) {
+                        const data = await res.json().catch(() => ({}));
+                        setError(data.error || "Something went wrong");
+                        return;
+                      }
 
                       setReviews(prev =>
                         prev.filter(rv => rv._id !== r._id)
@@ -204,7 +227,7 @@ export default function GameReviews({
       </div>
 
       {owned && (
-        <div className="write-review">
+        <div className={styles.writeReview}>
           <h3>{editingReviewId ? "Edit your review" : "Write your review"}</h3>
 
           <MentionInput
@@ -233,7 +256,7 @@ export default function GameReviews({
             onChange={v => setMyReview({ ...myReview, cons: v })}
           />
 
-          <div className="verdict-picker">
+          <div className={styles.verdictPicker}>
             {Object.entries(VERDICTS).map(([key, v]) => {
               const Icon = v.Icon;
               return (
@@ -242,7 +265,7 @@ export default function GameReviews({
                   onClick={() =>
                     setMyReview({ ...myReview, verdict: key })
                   }
-                  className={myReview.verdict === key ? "active" : ""}
+                  className={myReview.verdict === key ? styles.verdictActive : ""}
                   style={{ color: v.color }}
                 >
                   <Icon size={16} />
@@ -253,6 +276,7 @@ export default function GameReviews({
           </div>
 
           <button
+            className={styles.submitBtn}
             onClick={submitReview}
             disabled={reviewLoading || !myReview.verdict}
           >
@@ -261,6 +285,7 @@ export default function GameReviews({
 
           {editingReviewId && (
             <button
+              className={styles.cancelBtn}
               onClick={() => {
                 setEditingReviewId(null);
                 setMyReview({});
@@ -271,188 +296,6 @@ export default function GameReviews({
           )}
         </div>
       )}
-
-      <style jsx>{`
-        :root {
-          --glass-bg: rgba(255,255,255,0.04);
-          --glass-border: rgba(255,255,255,0.12);
-          --blur: blur(14px);
-        }
-
-        .review-section {
-          margin-top: 48px;
-        }
-
-        .review-section h2 {
-          font-size: 24px;
-          font-weight: 700;
-          margin-bottom: 8px;
-        }
-
-        .review-count {
-          font-size: 13px;
-          opacity: 0.6;
-          margin-bottom: 20px;
-        }
-
-        .review-list {
-          display: grid;
-          gap: 20px;
-        }
-
-        .review-card {
-          background: var(--glass-bg);
-          backdrop-filter: var(--blur);
-          border: 1px solid var(--glass-border);
-          border-radius: 28px;
-          padding: 24px;
-          transition: all 0.25s ease;
-        }
-
-        .review-card:hover {
-          transform: translateY(-3px);
-          box-shadow: 0 16px 48px rgba(0,0,0,0.35);
-        }
-
-        .verdict-pill {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          padding: 6px 16px;
-          border-radius: 999px;
-          font-size: 12px;
-          font-weight: 600;
-          background: linear-gradient(
-            135deg,
-            rgba(255,255,255,0.25),
-            rgba(255,255,255,0.05)
-          );
-          border: 1px solid rgba(255,255,255,0.18);
-          backdrop-filter: blur(6px);
-          margin-bottom: 6px;
-        }
-
-        .review-meta {
-          font-size: 11px;
-          opacity: 0.6;
-          margin-bottom: 10px;
-        }
-
-        .review-card h4 {
-          font-size: 18px;
-          margin: 10px 0 6px;
-        }
-
-        .review-card p {
-          opacity: 0.85;
-          line-height: 1.65;
-        }
-
-        .like-btn {
-          margin-top: 12px;
-          background: transparent;
-          border: 1px solid var(--glass-border);
-          border-radius: 999px;
-          padding: 6px 14px;
-          font-size: 12px;
-          backdrop-filter: blur(6px);
-          transition: all 0.2s ease;
-        }
-
-        .like-btn.liked {
-          background: rgba(248,81,73,0.15);
-          border-color: rgba(248,81,73,0.6);
-          color: #f85149;
-        }
-
-        .review-actions {
-          display: flex;
-          gap: 10px;
-          margin-top: 12px;
-        }
-
-        .review-actions button {
-          background: transparent;
-          border: 1px solid var(--glass-border);
-          border-radius: 999px;
-          padding: 6px 14px;
-          font-size: 12px;
-        }
-
-        .write-review {
-          margin-top: 40px;
-          background: var(--glass-bg);
-          backdrop-filter: var(--blur);
-          border: 1px solid var(--glass-border);
-          border-radius: 32px;
-          padding: 28px;
-        }
-
-        .write-review h3 {
-          font-size: 22px;
-          margin-bottom: 20px;
-        }
-
-        .verdict-picker {
-          display: grid;
-          grid-template-columns: repeat(2, 1fr);
-          gap: 16px;
-          margin: 20px 0 28px;
-        }
-
-        .verdict-picker button {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 10px;
-          height: 52px;
-          padding: 0 22px;
-          background: rgba(255,255,255,0.04);
-          border: 1px solid rgba(255,255,255,0.12);
-          border-radius: 999px;
-          font-size: 14px;
-          font-weight: 500;
-          color: rgba(255,255,255,0.75);
-          backdrop-filter: blur(10px);
-          transition: all 0.25s ease;
-          white-space: nowrap;
-        }
-
-        .verdict-picker svg {
-          flex-shrink: 0;
-          stroke-width: 2.2;
-        }
-
-        .verdict-picker button.active {
-          background: linear-gradient(
-            135deg,
-            rgba(255,255,255,0.18),
-            rgba(255,255,255,0.06)
-          );
-          border-color: currentColor;
-          box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 40%, transparent);
-          color: white;
-        }
-
-        .write-review button:not(.verdict-picker button) {
-          background: linear-gradient(
-            135deg,
-            rgba(46,160,67,0.9),
-            rgba(46,160,67,0.6)
-          );
-          border: none;
-          border-radius: 999px;
-          padding: 10px 24px;
-          font-size: 13px;
-          font-weight: 600;
-          margin-right: 10px;
-        }
-
-        .write-review button:disabled {
-          background: rgba(255,255,255,0.08);
-          color: rgba(255,255,255,0.4);
-        }
-      `}</style>
     </div>
   );
 }

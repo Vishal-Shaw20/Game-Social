@@ -7,6 +7,7 @@ import { URL, fileURLToPath } from "url";
 import { readFileSync } from "fs";
 import path from "path";
 import { Agent as UndiciAgent } from "undici";
+import logger from "../config/logger.js";
 
 const STEAMSPY_URL = "https://steamspy.com/api.php?request=top100in2weeks";
 
@@ -20,10 +21,10 @@ let steamspyAgent;
 try {
   const ca = readFileSync(CA_PATH, "utf8");
   steamspyAgent = new UndiciAgent({ connect: { ca } });
-  console.log(new Date().toISOString(), `Loaded extra CA for SteamSpy from ${CA_PATH}`);
+  logger.info("Loaded extra CA for SteamSpy from %s", CA_PATH);
 } catch (e) {
-  console.warn(new Date().toISOString(), `Failed to load CA file at ${CA_PATH}. Using default system CA. Error: ${e.message}`);
-  steamspyAgent = undefined;
+  logger.warn("No CA file at %s, using TLS-bypass agent for SteamSpy: %s", CA_PATH, e.message);
+  steamspyAgent = new UndiciAgent({ connect: { rejectUnauthorized: false } });
 }
 
 // helpers
@@ -59,7 +60,7 @@ export async function logServerCertChain(hostUrl, timeoutMs = 5000) {
     const host = u.hostname;
     const port = Number(u.port || 443);
 
-    console.log(new Date().toISOString(), `Inspecting TLS cert chain for ${host}:${port} ...`);
+    logger.info("Inspecting TLS cert chain for %s:%d", host, port);
 
     await new Promise((resolve, reject) => {
       const socket = tls.connect(
@@ -68,7 +69,7 @@ export async function logServerCertChain(hostUrl, timeoutMs = 5000) {
           try {
             const cert = socket.getPeerCertificate(true);
             if (!cert) {
-              console.warn("No certificate info available.");
+              logger.warn("No certificate info available");
               socket.end();
               return resolve();
             }
@@ -84,11 +85,7 @@ export async function logServerCertChain(hostUrl, timeoutMs = 5000) {
             const fmt = o => Object.entries(o || {}).map(([k, v]) => `${k}=${v}`).join(", ");
 
             chain.forEach((c, i) => {
-              console.log(`-- cert[${i}] --`);
-              console.log(" subject:", fmt(c.subject));
-              console.log(" issuer: ", fmt(c.issuer));
-              console.log(" valid_from:", c.valid_from);
-              console.log(" valid_to  :", c.valid_to);
+              logger.debug({ cert: i, subject: fmt(c.subject), issuer: fmt(c.issuer), valid_from: c.valid_from, valid_to: c.valid_to }, "TLS cert");
             });
 
             socket.end();
@@ -108,9 +105,9 @@ export async function logServerCertChain(hostUrl, timeoutMs = 5000) {
       socket.on("error", reject);
     });
 
-    console.log(new Date().toISOString(), "TLS cert inspection done.");
+    logger.info("TLS cert inspection done");
   } catch (err) {
-    console.error("logServerCertChain error:", err);
+    logger.error({ err }, "logServerCertChain error");
   }
 }
 
@@ -123,7 +120,7 @@ export async function fetchAndStore({ enforceTimestampIdempotency = true } = {})
 
   try {
     const bucketTs = computeBucketTimestamp();
-    console.log(new Date().toISOString(), "Starting SteamSpy fetch for bucket timestamp:", bucketTs);
+    logger.info("Starting SteamSpy fetch for bucket timestamp: %s", bucketTs);
 
     if (enforceTimestampIdempotency) {
       const checkSql = `
@@ -134,7 +131,7 @@ export async function fetchAndStore({ enforceTimestampIdempotency = true } = {})
       `;
       const chk = await client.query(checkSql, [bucketTs]);
       if (chk.rowCount > 0) {
-        console.log("Idempotency: Snapshot exists already. Skipping.");
+        logger.info("Idempotency: Snapshot exists already. Skipping");
         return;
       }
     }
@@ -151,7 +148,7 @@ export async function fetchAndStore({ enforceTimestampIdempotency = true } = {})
     const json = await r.json();
     const rows = Object.values(json);
     if (!rows.length) {
-      console.warn("SteamSpy returned empty data.");
+      logger.warn("SteamSpy returned empty data");
       return;
     }
 
@@ -218,7 +215,7 @@ export async function fetchAndStore({ enforceTimestampIdempotency = true } = {})
     }
 
     if (!valuesSQL.length) {
-      console.warn("No valid rows after parsing. Skipping insert.");
+      logger.warn("No valid rows after parsing. Skipping insert");
       return;
     }
 
@@ -231,7 +228,7 @@ export async function fetchAndStore({ enforceTimestampIdempotency = true } = {})
     await client.query(insertSQL, params);
     await client.query("COMMIT");
 
-    console.log(new Date().toISOString(), `Inserted ${valuesSQL.length} rows under bucket_id ${bucketId}`);
+    logger.info("Inserted %d rows under bucket_id %s", valuesSQL.length, bucketId);
 
     // Cleanup old snapshots
     const KEEP = Number(process.env.KEEP_SNAPSHOTS ?? 56);
@@ -249,12 +246,12 @@ export async function fetchAndStore({ enforceTimestampIdempotency = true } = {})
         WHERE bucket_id < (SELECT min_bucket FROM cutoff)
       `;
       const delRes = await client.query(cleanupSQL, [KEEP]);
-      console.log("Cleanup deleted:", delRes.rowCount);
+      logger.info("Cleanup deleted: %d", delRes.rowCount);
     }
 
   } catch (err) {
     try { await client.query("ROLLBACK"); } catch {}
-    console.error("fetchAndStore error:", err);
+    logger.error({ err }, "fetchAndStore error");
     throw err;
   } finally {
     client.release();
@@ -263,14 +260,14 @@ export async function fetchAndStore({ enforceTimestampIdempotency = true } = {})
 
 export function startCron({ runImmediately = true } = {}) {
   cron.schedule("0 */6 * * *", () => {
-    console.log("Cron triggered for SteamSpy trending.");
-    fetchAndStore().catch(e => console.error("Scheduled fetch failed:", e));
+    logger.info("Cron triggered for SteamSpy trending");
+    fetchAndStore().catch(e => logger.error({ err: e }, "Scheduled fetch failed"));
   }, {
     scheduled: true,
     timezone: "UTC"
   });
 
   if (runImmediately) {
-    fetchAndStore().catch(e => console.error("Initial fetch failed:", e));
+    fetchAndStore().catch(e => logger.error({ err: e }, "Initial fetch failed"));
   }
 }

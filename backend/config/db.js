@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import pkg from "pg";
+import logger from "./logger.js";
 const { Pool } = pkg;
 
 let pgPool;
@@ -8,7 +9,7 @@ const connectDB = async () => {
   try {
     // MongoDB
     await mongoose.connect(process.env.MONGO_URI);
-    console.log(`✅ MongoDB connected`);
+    logger.info("MongoDB connected");
 
     // PostgreSQL
     pgPool = new Pool({
@@ -19,10 +20,10 @@ const connectDB = async () => {
 });
 
     const pgClient = await pgPool.connect();
-    console.log("✅ PostgreSQL connected");
+    logger.info("PostgreSQL connected");
     pgClient.release();
   } catch (error) {
-    console.error(`❌ Database connection error: ${error.message}`);
+    logger.error({ err: error }, "Database connection error");
     process.exit(1);
   }
 };

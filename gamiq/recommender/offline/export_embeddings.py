@@ -1,7 +1,10 @@
+import logging
 import psycopg2
 import numpy as np
 import pickle
 from recommender.config import DB_CONFIG, ARTIFACTS_DIR
+
+logger = logging.getLogger(__name__)
 
 EMB_DIM = 1024    # changed from 384 — bge-large-en-v1.5 is 1024 dims
 BATCH   = 10000
@@ -18,7 +21,7 @@ def main():
     cur.execute("SELECT COUNT(*) FROM content_embeddings;")
     TOTAL_ROWS = cur.fetchone()[0]
 
-    print(f"Total embeddings in DB: {TOTAL_ROWS}")
+    logger.info("Total embeddings in DB: %d", TOTAL_ROWS)
 
     # -------- CREATE MEMMAP FILES --------
 
@@ -43,7 +46,7 @@ def main():
     last_id = 0
     written = 0
 
-    print("Starting export...")
+    logger.info("Starting export...")
 
     while True:
 
@@ -71,7 +74,7 @@ def main():
 
         last_id = rows[-1][0]
 
-        print(f"Written: {written}/{TOTAL_ROWS}")
+        logger.info("Written: %d/%d", written, TOTAL_ROWS)
 
     # -------- FLUSH TO DISK --------
 
@@ -81,7 +84,7 @@ def main():
     with open(str(ARTIFACTS_DIR / "titles.pkl"), "wb") as f:
         pickle.dump(titles, f)
 
-    print("DONE — Export complete.")
+    logger.info("DONE — Export complete.")
     conn.close()
 
 

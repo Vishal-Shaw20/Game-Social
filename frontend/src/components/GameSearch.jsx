@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import styles from "./GameSearch.module.css";
 
 const GENRES = [
   "Action",
@@ -22,6 +23,7 @@ export default function GameSearch() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [rateLimitMsg, setRateLimitMsg] = useState("");
   const [genres, setGenres] = useState([]);
   const [platforms, setPlatforms] = useState([]);
   const [open, setOpen] = useState(false);
@@ -52,6 +54,13 @@ export default function GameSearch() {
           `${import.meta.env.VITE_API_URL}/api/search/games?${params.toString()}`,
           { signal: controller.signal }
         );
+
+        if (res.status === 429) {
+          const data = await res.json().catch(() => ({}));
+          setRateLimitMsg(data.error || "Too many search requests, please slow down");
+          setTimeout(() => setRateLimitMsg(""), 5000);
+          return;
+        }
 
         if (!res.ok) return;
         const data = await res.json();
@@ -94,8 +103,8 @@ export default function GameSearch() {
   const showLoader = open && loading;
 
   return (
-    <div className="gs-root">
-      <div className="gs-container" ref={containerRef}>
+    <div className={styles.gsRoot}>
+      <div className={styles.gsContainer} ref={containerRef}>
         {/* SEARCH INPUT */}
         <input
           value={query}
@@ -106,20 +115,27 @@ export default function GameSearch() {
             }
           }}
           placeholder="Search games by name…"
-          className="gs-input"
+          className={styles.gsInput}
         />
 
         {/* LOADER */}
-        <div className={`loader-float ${showLoader ? "visible" : ""}`}>
+        <div className={`${styles.loaderFloat} ${showLoader ? styles.visible : ""}`}>
           Searching…
         </div>
 
+        {/* RATE LIMIT */}
+        {rateLimitMsg && (
+          <div className={`${styles.loaderFloat} ${styles.visible}`} style={{ color: "var(--color-error, #f85149)" }}>
+            {rateLimitMsg}
+          </div>
+        )}
+
         {/* RESULTS */}
-        <div className={`results-float ${showResults ? "visible" : ""}`}>
+        <div className={`${styles.resultsFloat} ${showResults ? styles.visible : ""}`}>
           {results.slice(0, MAX_RECOMMENDATIONS).map(g => (
             <div
               key={g.id}
-              className="result-row"
+              className={styles.resultRow}
               onClick={() => {
                 setOpen(false);
                 navigate(`/game/${g.id}`);
@@ -131,15 +147,15 @@ export default function GameSearch() {
         </div>
 
         {/* GENRE FILTER */}
-        <div className="filter-row">
-          <div className="filter-inner">
-            <span className="filter-label">Genre</span>
-            <div className="pill-group">
+        <div className={styles.filterRow}>
+          <div className={styles.filterInner}>
+            <span className={styles.filterLabel}>Genre</span>
+            <div className={styles.pillGroup}>
               {GENRES.map(g => (
                 <button
                   key={g}
                   onClick={() => toggle(genres, g, setGenres)}
-                  className={`pill ${genres.includes(g) ? "active" : ""}`}
+                  className={`${styles.pill} ${genres.includes(g) ? styles.active : ""}`}
                 >
                   {g}
                 </button>
@@ -149,18 +165,18 @@ export default function GameSearch() {
         </div>
 
         {/* PLATFORM FILTER */}
-        <div className="filter-row">
-          <div className="filter-inner">
-            <span className="filter-label">Platform</span>
-            <div className="pill-group">
+        <div className={styles.filterRow}>
+          <div className={styles.filterInner}>
+            <span className={styles.filterLabel}>Platform</span>
+            <div className={styles.pillGroup}>
               {PLATFORMS.map(p => (
                 <button
                   key={p}
                   onClick={() =>
                     toggle(platforms, p.toLowerCase(), setPlatforms)
                   }
-                  className={`pill ${
-                    platforms.includes(p.toLowerCase()) ? "active" : ""
+                  className={`${styles.pill} ${
+                    platforms.includes(p.toLowerCase()) ? styles.active : ""
                   }`}
                 >
                   {p}
@@ -170,191 +186,6 @@ export default function GameSearch() {
           </div>
         </div>
       </div>
-
-      <style jsx>{`
-        .gs-root {
-          width: 100%;
-          padding: 32px 16px 40px;
-          color: var(--color-text-primary);
-          display: flex;
-          justify-content: center;
-        }
-
-        .gs-container {
-          position: relative;
-          width: 100%;
-          max-width: 900px;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-        }
-
-        /* SEARCH INPUT */
-        .gs-input {
-          width: 100%;
-          max-width: 800px;
-          padding: var(--space-4) var(--space-2);
-          background: transparent;
-          border: none;
-          border-bottom: 2px solid rgba(148, 163, 184, 0.35);
-          color: var(--color-text-primary);
-          font-size: var(--text-xl);
-          font-weight: var(--weight-medium);
-          outline: none;
-          text-align: center;
-          z-index: 3;
-          caret-color: var(--color-accent-primary);
-          transition: border-bottom-color var(--transition-slow);
-        }
-
-        .gs-input:focus {
-          border-bottom-color: var(--color-accent-primary);
-        }
-
-        .gs-input::placeholder {
-          color: var(--color-text-muted);
-          opacity: 0.7;
-        }
-
-        /* LOADER */
-        .loader-float {
-          position: absolute;
-          top: 64px;
-          font-size: var(--text-sm);
-          color: var(--color-text-tertiary);
-          opacity: 0;
-          transform: translateY(-4px);
-          transition:
-            opacity var(--transition-slow),
-            transform var(--transition-slow);
-          pointer-events: none;
-          z-index: 5;
-          font-weight: var(--weight-medium);
-        }
-
-        .loader-float.visible {
-          opacity: 1;
-          transform: translateY(0);
-        }
-
-        /* RESULTS – ENTER SLOW, EXIT FAST */
-        .results-float {
-          position: absolute;
-          top: 88px;
-          width: 100%;
-          max-width: 800px;
-          background: var(--color-bg-elevated);
-          backdrop-filter: blur(20px);
-          border: 1px solid var(--color-border-primary);
-          border-radius: var(--radius-2xl);
-          box-shadow: var(--shadow-xl);
-          padding: var(--space-2);
-          opacity: 0;
-          transform: translateY(-4px);
-          pointer-events: none;
-          z-index: 10;
-          transition:
-            opacity 0.22s ease-out,
-            transform 0.22s ease-out;
-        }
-
-        .results-float.visible {
-          opacity: 1;
-          transform: translateY(0);
-          pointer-events: auto;
-          transition:
-            opacity var(--transition-slow),
-            transform var(--transition-slow);
-        }
-
-        .result-row {
-          padding: var(--space-3) var(--space-4);
-          border-radius: var(--radius-lg);
-          cursor: pointer;
-          transition: all var(--transition-base);
-          font-size: var(--text-sm);
-          font-weight: var(--weight-medium);
-          color: var(--color-text-primary);
-          margin-bottom: var(--space-1);
-        }
-
-        .result-row:hover {
-          background: rgba(96, 165, 250, 0.15);
-          transform: translateX(4px);
-        }
-
-        .result-row:active {
-          transform: translateX(2px);
-        }
-
-        /* FILTERS */
-        .filter-row {
-          margin-top: var(--space-6);
-          width: 100%;
-          display: flex;
-          justify-content: center;
-        }
-
-        .filter-inner {
-          display: flex;
-          align-items: center;
-          gap: var(--space-4);
-          flex-wrap: wrap;
-          justify-content: center;
-          max-width: 800px;
-        }
-
-        .filter-label {
-          font-size: var(--text-xs);
-          font-weight: var(--weight-semibold);
-          letter-spacing: 0.08em;
-          text-transform: uppercase;
-          color: var(--color-text-tertiary);
-          opacity: 0.9;
-          min-width: 70px;
-        }
-
-        .pill-group {
-          display: flex;
-          flex-wrap: wrap;
-          gap: var(--space-2);
-        }
-
-        .pill {
-          padding: var(--space-2) var(--space-4);
-          border-radius: var(--radius-full);
-          background: rgba(255, 255, 255, 0.05);
-          border: 2px solid transparent;
-          color: var(--color-text-secondary);
-          font-size: var(--text-sm);
-          font-weight: var(--weight-medium);
-          cursor: pointer;
-          outline: none;
-          transition: all var(--transition-base);
-        }
-
-        .pill:hover {
-          background: rgba(255, 255, 255, 0.08);
-          border-color: var(--color-border-primary);
-          transform: translateY(-1px);
-        }
-
-        .pill.active {
-          background: rgba(96, 165, 250, 0.22);
-          border: 2px solid var(--color-accent-primary);
-          color: var(--color-text-primary);
-          box-shadow: 0 0 12px rgba(96, 165, 250, 0.2);
-        }
-
-        .pill:focus-visible {
-          outline: 2px solid var(--color-border-focus);
-          outline-offset: 2px;
-        }
-
-        .pill:active {
-          transform: translateY(0);
-        }
-      `}</style>
     </div>
   );
 }

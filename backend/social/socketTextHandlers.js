@@ -1,5 +1,19 @@
 // social/socketTextHandlers.js
 import { getPG } from "../config/db.js";
+import logger from "../config/logger.js";
+import { RateLimiterMemory } from "rate-limiter-flexible";
+
+const socketLimiter = new RateLimiterMemory({ points: 10, duration: 10 });
+
+const MAX_MESSAGE_LENGTH = 2000;
+
+function sanitizeText(raw) {
+  return raw
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .trim()
+    .slice(0, MAX_MESSAGE_LENGTH);
+}
 
 /* ---------------- DB helpers ---------------- */
 
@@ -28,15 +42,14 @@ async function loadHistory(pg, roomId, limit = 50) {
 /* ---------------- User helpers ---------------- */
 
 function getUserFromSocket(socket) {
-  const authUser = socket.handshake?.auth?.user;
+  const user = socket.user;
 
-  if (authUser && typeof authUser === "object") {
+  if (user && typeof user === "object") {
     return {
-      id: authUser.id ?? authUser._id ?? null,
+      id: user._id?.toString() ?? user.id ?? null,
       name:
-        authUser.name ??
-        authUser.displayName ??
-        authUser.username ??
+        user.displayName ??
+        user.username ??
         `User-${socket.id.slice(0, 6)}`
     };
   }
@@ -74,7 +87,7 @@ export function attachTextHandlers(io, socket) {
 
       cb?.({ ok: true });
     } catch (err) {
-      console.error("join-room error:", err);
+      logger.error({ err }, "join-room error");
       cb?.({ error: "join_failed" });
     }
   });
@@ -97,7 +110,7 @@ export function attachTextHandlers(io, socket) {
 
       cb?.({ ok: true });
     } catch (err) {
-      console.error("leave-room error:", err);
+      logger.error({ err }, "leave-room error");
       cb?.({ error: "leave_failed" });
     }
   });
@@ -105,9 +118,27 @@ export function attachTextHandlers(io, socket) {
   /* send-msg */
   socket.on("send-msg", async (payload, cb) => {
     try {
+      try {
+        await socketLimiter.consume(user.id || socket.id);
+      } catch {
+        cb?.({ error: "rate_limited" });
+        return;
+      }
+
       const { roomId, text, clientId } = payload || {};
       if (!roomId || !text) {
         cb?.({ error: "missing_params" });
+        return;
+      }
+
+      if (typeof text !== "string") {
+        cb?.({ error: "invalid_text" });
+        return;
+      }
+
+      const clean = sanitizeText(text);
+      if (clean.length === 0) {
+        cb?.({ error: "empty_message" });
         return;
       }
 
@@ -115,7 +146,7 @@ export function attachTextHandlers(io, socket) {
         roomId,
         userId: user.id,
         username: user.name,
-        text
+        text: clean
       });
 
       const msg = {
@@ -123,14 +154,14 @@ export function attachTextHandlers(io, socket) {
         clientId: clientId ?? null,
         roomId,
         from: { id: user.id, name: user.name },
-        text,
+        text: clean,
         ts: new Date(save.created_at).toISOString()
       };
 
       io.to(roomId).emit("message", msg);
       cb?.({ ok: true, id: save.id });
     } catch (err) {
-      console.error("[socketText] send-msg error:", err);
+      logger.error({ err }, "send-msg error");
       cb?.({ error: "send_failed" });
     }
   });
@@ -148,13 +179,13 @@ export function attachTextHandlers(io, socket) {
       socket.emit("chat-history", hist);
       cb?.({ ok: true, count: hist.length });
     } catch (err) {
-      console.error("get-history error:", err);
+      logger.error({ err }, "get-history error");
       cb?.({ error: "history_failed" });
     }
   });
 
   /* disconnect */
   socket.on("disconnect", () => {
-    console.log("Text socket disconnected:", socket.id);
+    logger.debug("Text socket disconnected: %s", socket.id);
   });
 }

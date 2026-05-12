@@ -10,6 +10,9 @@ import { extractMentions } from "../utils/parseMentions.js";
 import { deleteNotification } from "../utils/deleteNotification.js";
 import { createActivity } from "../utils/createActivity.js";
 import { deleteActivity } from "../utils/deleteActivity.js";
+import logger from "../config/logger.js";
+import { writeLimiter } from "../middleware/rateLimiter.js";
+import { requireAuth } from "../middleware/requireAuth.js";
 
 const normalizeTags = (arr, allowed) =>
   Array.isArray(arr)
@@ -37,16 +40,9 @@ router.get("/user/:username", async (req, res) => {
 
     res.json(reviews);
   } catch (e) {
-    console.error("[GET USER REVIEWS]", e);
+    logger.error({ err: e }, "get user reviews failed");
     res.status(500).json([]);
   }
-});
-
-/* ===========================
-   ROUTE ENTRY DEBUG
-=========================== */
-router.use((req, res, next) => {
-  next();
 });
 
 /* ===========================
@@ -70,15 +66,13 @@ router.get("/game/:rawgId", async (req, res) => {
 
     res.json(reviews);
   } catch (e) {
-    console.error("[GET REVIEWS] ERROR", e);
+    logger.error({ err: e }, "get reviews failed");
     res.status(500).json([]);
   }
 });
 // UPDATE REVIEW
-router.put("/:id", async (req, res) => {
+router.put("/:id", requireAuth, writeLimiter, async (req, res) => {
   try {
-    if (!req.user) return res.status(401).json({});
-
     const review = await GameReview.findById(req.params.id);
     if (!review) return res.status(404).json({});
 
@@ -107,7 +101,7 @@ router.put("/:id", async (req, res) => {
 
     res.json(review);
   } catch (e) {
-    console.error("[UPDATE REVIEW]", e);
+    logger.error({ err: e }, "update review failed");
     res.status(500).json({});
   }
 });
@@ -117,11 +111,9 @@ router.put("/:id", async (req, res) => {
 =========================== */
 
 
-router.post("/:id/unlike", async (req, res) => {
+router.post("/:id/unlike", requireAuth, writeLimiter, async (req, res) => {
 
   try {
-    if (!req.user) return res.status(401).json({});
-
     // Remove like
     await GameReview.findByIdAndUpdate(req.params.id, {
       $pull: { likes: req.user._id }
@@ -151,7 +143,7 @@ router.post("/:id/unlike", async (req, res) => {
     res.json({ ok: true });
 
   } catch (e) {
-    console.error("[UNLIKE REVIEW] ERROR", e);
+    logger.error({ err: e }, "unlike review failed");
     res.status(500).json({ ok: false });
   }
 });
@@ -167,29 +159,21 @@ router.get("/:reviewId/comments", async (req, res) => {
       .sort({ createdAt: 1 })
       .lean();
 
-    // 🔍 DEBUG CONFIRMATION (ADD THIS)
-    
-
     res.json(comments);
   } catch (e) {
-    console.error("[GET COMMENTS]", e);
+    logger.error({ err: e }, "get comments failed");
     res.status(500).json([]);
   }
 });
 
-router.post("/:reviewId/comments", async (req, res) => {
+router.post("/:reviewId/comments", requireAuth, writeLimiter, async (req, res) => {
 
 
   try {
-    if (!req.user) {
-      console.warn("[POST COMMENT] ❌ NO USER");
-      return res.status(401).json({ error: "no_user" });
-    }
-
     const { body, parentId } = req.body;
 
     if (!body?.trim()) {
-      console.warn("[POST COMMENT] ❌ EMPTY BODY");
+      logger.warn("post comment: empty body");
       return res.status(400).json({ error: "empty_body" });
     }
 
@@ -236,14 +220,12 @@ if (mentions.length) {
   
     res.json(comment);
   } catch (e) {
-    console.error("[POST COMMENT] 💥 ERROR", e);
+    logger.error({ err: e }, "post comment failed");
     res.status(500).json({ error: "comment_create_failed" });
   } 
 });
 
-router.post("/comments/:id/like", async (req, res) => {
-  if (!req.user) return res.status(401).json({});
-
+router.post("/comments/:id/like", requireAuth, writeLimiter, async (req, res) => {
   const comment = await ReviewComment.findById(req.params.id);
   if (!comment) return res.status(404).json({});
 
@@ -295,10 +277,8 @@ router.post("/comments/:id/like", async (req, res) => {
 });
 
 // UPDATE COMMENT
-router.put("/comments/:id", async (req, res) => {
+router.put("/comments/:id", requireAuth, writeLimiter, async (req, res) => {
   try {
-    if (!req.user) return res.status(401).json({});
-
     const comment = await ReviewComment.findById(req.params.id);
     if (!comment) return res.status(404).json({});
 
@@ -317,16 +297,14 @@ router.put("/comments/:id", async (req, res) => {
 
     res.json(comment);
   } catch (e) {
-    console.error("[UPDATE COMMENT]", e);
+    logger.error({ err: e }, "update comment failed");
     res.status(500).json({});
   }
 });
 
 // DELETE COMMENT (with replies)
-router.delete("/comments/:id", async (req, res) => {
+router.delete("/comments/:id", requireAuth, writeLimiter, async (req, res) => {
   try {
-    if (!req.user) return res.status(401).json({});
-
     const comment = await ReviewComment.findById(req.params.id);
     if (!comment) return res.status(404).json({});
 
@@ -346,19 +324,14 @@ router.delete("/comments/:id", async (req, res) => {
 
     res.json({ ok: true });
   } catch (e) {
-    console.error("[DELETE COMMENT]", e);
+    logger.error({ err: e }, "delete comment failed");
     res.status(500).json({});
   }
 });
 
 
-router.post("/:rawgId", async (req, res) => {
+router.post("/:rawgId", requireAuth, writeLimiter, async (req, res) => {
   try {
-    if (!req.user) {
-      console.warn("[POST REVIEW] no user");
-      return res.status(401).json({});
-    }
-
     const {
       verdict,
       title,
@@ -369,7 +342,7 @@ router.post("/:rawgId", async (req, res) => {
     } = req.body;
 
     if (!verdict) {
-      console.warn("[POST REVIEW] missing verdict");
+      logger.warn("post review: missing verdict");
       return res.status(400).json({ error: "verdict required" });
     }
 
@@ -432,18 +405,13 @@ await createActivity({
 
     res.json(review);
   } catch (e) {
-    console.error("[POST REVIEW] ERROR", e);
+    logger.error({ err: e }, "post review failed");
     res.status(500).json({ error: "review_save_failed" });
   }
 });
-router.post("/:id/like", async (req, res) => {
+router.post("/:id/like", requireAuth, writeLimiter, async (req, res) => {
 
   try {
-    if (!req.user) {
-      console.warn("[LIKE REVIEW] no user");
-      return res.status(401).json({});
-    }
-
     await GameReview.findByIdAndUpdate(req.params.id, {
       $addToSet: { likes: req.user._id }
     });
@@ -474,16 +442,14 @@ if (
 
     res.json({ ok: true });
   } catch (e) {
-    console.error("[LIKE REVIEW] ERROR", e);
+    logger.error({ err: e }, "like review failed");
     res.status(500).json({ ok: false });
   }
 });
 
 // DELETE REVIEW
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", requireAuth, writeLimiter, async (req, res) => {
   try {
-    if (!req.user) return res.status(401).json({});
-
     const review = await GameReview.findById(req.params.id);
     if (!review) return res.status(404).json({});
 
@@ -504,7 +470,7 @@ router.delete("/:id", async (req, res) => {
 
     res.json({ ok: true });
   } catch (e) {
-    console.error("[DELETE REVIEW]", e);
+    logger.error({ err: e }, "delete review failed");
     res.status(500).json({});
   }
 });

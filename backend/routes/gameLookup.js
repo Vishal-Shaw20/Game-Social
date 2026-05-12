@@ -2,18 +2,10 @@
 import express from "express";
 import fetch from "node-fetch";
 import { getPG } from "../config/db.js";
+import { rawgToSteamAppId } from "../utils/rawgToSteam.js";
+import logger from "../config/logger.js";
 
 const router = express.Router();
-
-async function rawgToSteamAppId(rawgId) {
-  const pg = getPG();
-  const { rows } = await pg.query(
-    `SELECT steam_id FROM steam_rawg_map WHERE rawg_id = $1 LIMIT 1`,
-    [String(rawgId)]
-  );
-  if (!rows.length) return null;
-  return Number(rows[0].steam_id);
-}
 
 // GET /api/game/rawg/:rawgId
 router.get("/:rawgId", async (req, res) => {
@@ -31,8 +23,6 @@ router.get("/:rawgId", async (req, res) => {
       [Number(rawgId)]
     );
 
-    // if (!exists.rows.length)
-    //   return res.status(404).json({ error: "Game not found" });
     const hasLocalGame = exists.rows.length > 0;
 
 
@@ -40,11 +30,6 @@ router.get("/:rawgId", async (req, res) => {
 
     let steam = null;
     if (steamAppId) {
-      // const r = await fetch(
-      //   `https://store.steampowered.com/api/appdetails?appids=${steamAppId}&l=english`
-      // );
-      // const j = await r.json();
-      // steam = j?.[steamAppId]?.success ? j[steamAppId].data : null;
       try {
   const r = await fetch(
     `https://store.steampowered.com/api/appdetails?appids=${steamAppId}&l=english`,
@@ -60,7 +45,7 @@ router.get("/:rawgId", async (req, res) => {
     steam = j?.[steamAppId]?.success ? j[steamAppId].data : null;
   }
 } catch (e) {
-  console.warn("Steam fetch failed:", e.message);
+  logger.warn("Steam fetch failed: %s", e.message);
   steam = null;
 }
 
@@ -90,7 +75,7 @@ router.get("/:rawgId", async (req, res) => {
         : null
     });
   } catch (err) {
-  console.error("game lookup error:", err);
+  logger.error({ err }, "game lookup failed");
   return res.status(500).json({ error: "Game lookup failed" });
 }
 

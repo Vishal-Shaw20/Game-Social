@@ -1,4 +1,5 @@
 import SteamLibrary from "../models/SteamLibraries.js";
+import logger from "../config/logger.js";
 
 /**
  * Returns total playtime in HOURS for a given user + steam appid.
@@ -24,7 +25,7 @@ export async function getPlaytime(userId, steamAppId) {
 
     return Math.round((minutes / 60) * 10) / 10; // 1 decimal
   } catch (err) {
-    console.error("[getPlaytime] error:", err);
+    logger.error({ err }, "getPlaytime failed");
     return null;
   }
 }

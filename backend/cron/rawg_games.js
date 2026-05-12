@@ -1,4 +1,5 @@
 import cron from "node-cron";
+import logger from "../config/logger.js";
 
 const GAMIQ_URL = process.env.GAMIQ_URL || "http://localhost:8000";
 const PIPELINE_API_KEY = process.env.PIPELINE_API_KEY;
@@ -21,23 +22,23 @@ export function startRawgCron({ runImmediately = false } = {}) {
   started = true;
 
   cron.schedule("0 3 * * *", async () => {
-    console.log("[RAWG] Daily cron — triggering gamiq pipeline");
+    logger.info("RAWG daily cron: triggering gamiq pipeline");
     try {
       const status = await triggerPipeline();
-      console.log(`[RAWG] Pipeline trigger: ${status}`);
+      logger.info("RAWG pipeline trigger: %s", status);
     } catch (err) {
-      console.error("[RAWG] Pipeline trigger failed", err);
+      logger.error({ err }, "RAWG pipeline trigger failed");
     }
   });
 
   if (runImmediately) {
     (async () => {
-      console.log("[RAWG] Startup — triggering gamiq pipeline");
+      logger.info("RAWG startup: triggering gamiq pipeline");
       try {
         const status = await triggerPipeline();
-        console.log(`[RAWG] Startup pipeline trigger: ${status}`);
+        logger.info("RAWG startup pipeline trigger: %s", status);
       } catch (err) {
-        console.error("[RAWG] Startup pipeline trigger failed", err);
+        logger.error({ err }, "RAWG startup pipeline trigger failed");
       }
     })();
   }

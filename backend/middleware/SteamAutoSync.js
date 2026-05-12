@@ -1,8 +1,10 @@
 import { triggerSteamSyncIfNeeded } from "../services/steamLibrary.js";
+import { clearLibraryCache } from "../utils/getLibraryForUser.js";
+import logger from "../config/logger.js";
 
 export default async function steamAutoSync(req, res, next) {
   try {
-    console.log("[SteamAutoSync] / hit by", req.user?._id);
+    logger.debug("SteamAutoSync hit by %s", req.user?._id);
     if (!req.user) return next();
 
     const steamAccount = req.user.linkedAccounts?.find(
@@ -10,10 +12,11 @@ export default async function steamAutoSync(req, res, next) {
     );
 
     if (!steamAccount) return next();
-    
+
     triggerSteamSyncIfNeeded(req.user._id, steamAccount.providerId);
+    clearLibraryCache(req.user._id);
   } catch (err) {
-    console.error("Steam auto-sync middleware error:", err);
+    logger.error({ err }, "Steam auto-sync middleware error");
   }
 
   next();

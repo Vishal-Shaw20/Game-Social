@@ -3,6 +3,7 @@ import { Strategy as SteamStrategy } from "passport-steam";
 import dotenv from "dotenv";
 import User from "../models/User.js";
 import { createSteamLibraryIfMissing } from "../services/steamLibrary.js";
+import logger from "../config/logger.js";
 
 dotenv.config();
 
@@ -34,7 +35,7 @@ passport.use(
             await req.user.save();
 
             createSteamLibraryIfMissing(req.user._id, profile.id)
-              .catch(err => console.error("Steam library init failed:", err));
+              .catch(err => logger.error({ err }, "Steam library init failed"));
           }
 
           return done(null, req.user);
@@ -54,12 +55,12 @@ passport.use(
           });
 
           createSteamLibraryIfMissing(user._id, profile.id)
-            .catch(err => console.error("Steam library init failed:", err));
+            .catch(err => logger.error({ err }, "Steam library init failed"));
         }
 
         return done(null, user);
       } catch (err) {
-        console.error("Steam strategy error:", err);
+        logger.error({ err }, "Steam strategy error");
         return done(err, null);
       }
     }

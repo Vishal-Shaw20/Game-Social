@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import GameChat from "../components/GameChat";
 import GameReviews from "../components/GameReviews";
+import styles from "./GameDetails.module.css";
 
 export default function GameDetails() {
   const { id } = useParams();
@@ -155,9 +156,9 @@ export default function GameDetails() {
       .then(j => Array.isArray(j) && setReviews(j));
   }, [id]);
 
-  if (loading) return <div className="page">Loading…</div>;
-  if (error) return <div className="page error">{error}</div>;
-  if (!game) return <div className="page">Game not found</div>;
+  if (loading) return <div className={styles.section}>Loading…</div>;
+  if (error) return <div className={styles.section}>{error}</div>;
+  if (!game) return <div className={styles.section}>Game not found</div>;
 
   const heroBg =
     heroScreenshots.length > 0
@@ -167,16 +168,16 @@ export default function GameDetails() {
   const shouldTruncate = game.description.length > 600;
 
   return (
-    <div className="game-details-container">
-      <button className="back-button" onClick={() => navigate(-1)}>
+    <div className={styles.container}>
+      <button className={styles.backButton} onClick={() => navigate(-1)}>
         ← Back
       </button>
 
-      <div className="hero" style={{ backgroundImage: `url(${heroBg})` }}>
-        <div className="hero-overlay" />
-        <div className="hero-content">
+      <div className={styles.hero} style={{ backgroundImage: `url(${heroBg})` }}>
+        <div className={styles.heroOverlay} />
+        <div className={styles.heroContent}>
           <h1>{game.name}</h1>
-          <div className="hero-meta">
+          <div className={styles.heroMeta}>
             {game.release && <span>{game.release}</span>}
             {game.metacritic && (
               <span>
@@ -184,17 +185,17 @@ export default function GameDetails() {
               </span>
             )}
             {game.price && (
-              <span className="price">
+              <span>
                 {game.price.final_formatted}
               </span>
             )}
           </div>
-          <div className="tags">
+          <div className={styles.tags}>
             {game.genres.map(g => (
               <span key={g}>{g}</span>
             ))}
             {game.categories.map(c => (
-              <span key={c} className="soft">
+              <span key={c} className={styles.soft}>
                 {c}
               </span>
             ))}
@@ -202,11 +203,11 @@ export default function GameDetails() {
         </div>
 
         {heroScreenshots.length > 1 && (
-          <div className="hero-dashes">
+          <div className={styles.heroDashes}>
             {heroScreenshots.map((_, i) => (
               <button
                 key={i}
-                className={i === heroIndex ? "dash active" : "dash"}
+                className={`${styles.dash} ${i === heroIndex ? styles.dashActive : ""}`}
                 onClick={() => setHeroIndex(i)}
               />
             ))}
@@ -214,23 +215,23 @@ export default function GameDetails() {
         )}
       </div>
 
-      <section className="section first">
-        <div className="desc-wrap">
+      <section className={styles.section}>
+        <div className={styles.descWrap}>
           <div
-            className={`desc ${
-              showFullDesc || !shouldTruncate ? "open" : ""
+            className={`${styles.desc} ${
+              showFullDesc || !shouldTruncate ? styles.descOpen : ""
             }`}
             dangerouslySetInnerHTML={{ __html: game.description }}
           />
 
           {!showFullDesc && shouldTruncate && (
-            <div className="desc-vignette" />
+            <div className={styles.descVignette} />
           )}
         </div>
 
         {shouldTruncate && (
           <button
-            className="toggle"
+            className={styles.toggle}
             onClick={() => setShowFullDesc(v => !v)}
           >
             {showFullDesc ? "Less" : "More"}
@@ -238,7 +239,7 @@ export default function GameDetails() {
         )}
       </section>
 
-      <section className="section">
+      <section className={styles.section}>
         <GameReviews
           gameId={id}
           reviews={reviews}
@@ -251,135 +252,11 @@ export default function GameDetails() {
         />
       </section>
 
-      <section className="section section-chat">
-        <div className="section-inner">
+      <section className={styles.section}>
+        <div className={styles.sectionInner}>
           <GameChat gameId={id} />
         </div>
       </section>
-
-      <style jsx>{`
-        .game-details-container {
-          background: #0b0f16;
-          color: #e6edf3;
-          min-height: 100vh;
-        }
-
-        .section-inner {
-          max-width: 1200px;
-          margin: 0 auto;
-        }
-
-        .back-button {
-          position: fixed;
-          top: 24px;
-          left: 24px;
-          z-index: 30;
-          background: rgba(255, 255, 255, 0.08);
-          backdrop-filter: blur(10px);
-          border: 1px solid rgba(255, 255, 255, 0.15);
-          color: white;
-          padding: 10px 18px;
-          border-radius: 999px;
-          cursor: pointer;
-          margin-top:20px;
-        }
-
-        .hero {
-          height: 560px;
-          position: relative;
-          display: flex;
-          align-items: flex-end;
-          background-size: cover;
-          background-position: center;
-        }
-
-        .hero-overlay {
-          position: absolute;
-          inset: 0;
-          background: linear-gradient(
-            to top,
-            rgba(11, 15, 22, 1) 0%,
-            rgba(11, 15, 22, 0.7) 40%,
-            rgba(11, 15, 22, 0.25) 65%,
-            transparent 85%
-          );
-        }
-
-        .hero-content {
-          position: relative;
-          z-index: 2;
-          padding: 0 64px 64px;
-          max-width: 800px;
-        }
-
-        .hero-dashes {
-          position: absolute;
-          bottom: 26px;
-          left: 50%;
-          transform: translateX(-50%);
-          display: flex;
-          gap: 8px;
-        }
-
-        .dash {
-          all: unset;
-          width: 22px;
-          height: 5px;
-          background: rgba(255, 255, 255, 0.35);
-          border-radius: 3px;
-          cursor: pointer;
-        }
-
-        .dash.active {
-          width: 34px;
-          background: linear-gradient(90deg, #58a6ff, #79c0ff);
-        }
-
-        .section {
-          padding: 48px 64px;
-          max-width: 1200px;
-          margin: 0 auto;
-        }
-
-        .desc-wrap {
-          position: relative;
-        }
-
-        .desc {
-          line-height: 1.8;
-          font-size: 16px;
-          max-height: 240px;
-          overflow: hidden;
-          transition: max-height 0.6s ease;
-        }
-
-        .desc.open {
-          max-height: 3000px;
-        }
-
-        .desc-vignette {
-          position: absolute;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          height: 120px;
-          pointer-events: none;
-          background: linear-gradient(
-            to bottom,
-            rgba(11, 15, 22, 0) 0%,
-            rgba(11, 15, 22, 0.6) 40%,
-            rgba(11, 15, 22, 0.85) 70%,
-            rgba(11, 15, 22, 1) 100%
-          );
-        }
-
-        .toggle {
-          all: unset;
-          margin-top: 24px;
-          color: #79c0ff;
-          cursor: pointer;
-        }
-      `}</style>
     </div>
   );
 }

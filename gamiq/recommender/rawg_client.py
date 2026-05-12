@@ -1,6 +1,9 @@
 import time
+import logging
 import requests
 from recommender.config import RAWG_API_KEYS
+
+logger = logging.getLogger(__name__)
 
 # ============================================================
 # -------------------- API KEY ROTATION ----------------------
@@ -20,18 +23,18 @@ def rawg_get(url: str, timeout: int = 10):
         try:
             response = requests.get(full_url, timeout=timeout)
         except Exception as e:
-            print(f"Request error: {e}")
+            logger.error("Request error: %s", e)
             return None
 
         if response.status_code == 429:
-            print(f"Rate limit hit on key {_current_key_index + 1}, switching...")
+            logger.warn("Rate limit hit on key %d, switching...", _current_key_index + 1)
             _current_key_index = (_current_key_index + 1) % len(RAWG_API_KEYS)
             time.sleep(1)
             continue
 
         return response
 
-    print("All API keys exhausted.")
+    logger.error("All API keys exhausted.")
     return None
 
 # ============================================================

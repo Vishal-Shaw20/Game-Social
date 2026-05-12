@@ -1,7 +1,10 @@
+import logging
 import time
 import requests
 import numpy as np
 from recommender.config import HF_TOKEN
+
+logger = logging.getLogger(__name__)
 
 API_URL = "https://router.huggingface.co/hf-inference/models/BAAI/bge-large-en-v1.5/pipeline/feature-extraction"
 HEADERS = {"Authorization": f"Bearer {HF_TOKEN}"}
@@ -16,7 +19,7 @@ def _call_api(texts: list[str]) -> list[list[float]]:
             return resp.json()
         if resp.status_code == 503:
             wait = min(2 ** attempt, 30)
-            print(f"[embedder] Model loading, retrying in {wait}s...")
+            logger.info("HF model loading, retrying in %ds", wait)
             time.sleep(wait)
             continue
         resp.raise_for_status()

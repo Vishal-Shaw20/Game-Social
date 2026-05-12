@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import styles from "./MentionInput.module.css";
 
 export default function MentionInput({
   value,
@@ -44,22 +45,22 @@ export default function MentionInput({
   };
 
   return (
-    <div className="mention-container">
+    <div className={styles.mentionContainer}>
       <textarea
         ref={ref}
         rows={rows}
         value={value}
         placeholder={placeholder}
         onChange={handleChange}
-        className="mention-textarea"
+        className={styles.mentionTextarea}
       />
 
       {query && results.length > 0 && (
-        <div className="mention-dropdown">
+        <div className={styles.mentionDropdown}>
           {results.map(u => (
             <div
               key={u._id}
-              className="mention-item"
+              className={styles.mentionItem}
               onMouseDown={() => insertMention(u.username)}
             >
               @{u.username}
@@ -70,70 +71,3 @@ export default function MentionInput({
     </div>
   );
 }
-
-      <style jsx>{`
-        .mention-container {
-          position: relative;
-        }
-
-        .mention-textarea {
-          width: 100%;
-          padding: var(--space-3) var(--space-4);
-          background: var(--color-bg-secondary);
-          border: 1px solid var(--color-border-primary);
-          border-radius: var(--radius-md);
-          color: var(--color-text-primary);
-          font-size: var(--text-sm);
-          font-family: inherit;
-          line-height: var(--leading-relaxed);
-          transition: all var(--transition-base);
-          resize: vertical;
-        }
-
-        .mention-textarea:focus {
-          border-color: var(--color-border-focus);
-          box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.1);
-        }
-
-        .mention-textarea::placeholder {
-          color: var(--color-text-muted);
-        }
-
-        .mention-dropdown {
-          position: absolute;
-          bottom: 100%;
-          left: 0;
-          background: var(--color-bg-elevated);
-          border: 1px solid var(--color-border-primary);
-          width: 100%;
-          max-height: 200px;
-          overflow-y: auto;
-          z-index: 50;
-          border-radius: var(--radius-lg);
-          box-shadow: var(--shadow-xl);
-          backdrop-filter: blur(20px);
-          margin-bottom: var(--space-2);
-        }
-
-        .mention-item {
-          padding: var(--space-3) var(--space-4);
-          cursor: pointer;
-          font-size: var(--text-sm);
-          color: var(--color-text-primary);
-          transition: all var(--transition-base);
-          border-bottom: 1px solid var(--color-border-secondary);
-        }
-
-        .mention-item:last-child {
-          border-bottom: none;
-        }
-
-        .mention-item:hover {
-          background: var(--color-bg-tertiary);
-          color: var(--color-text-primary);
-        }
-
-        .mention-item:active {
-          background: var(--color-bg-secondary);
-        }
-      `}</style>

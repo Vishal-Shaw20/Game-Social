@@ -1,55 +1,27 @@
-// routes/trending-composite.js
 import express from "express";
 import fetch from "node-fetch";
 import { getPG } from "../config/db.js";
 import {
-  getMappingBySteamId,
+  getMappingsBySteamIds,
   upsertMapping,
   autoMatchRawg
 } from "../utils/steamRawgmap.js";
+import logger from "../config/logger.js";
 
 const router = express.Router();
 
 const GAMIQ_URL = process.env.GAMIQ_URL || "http://localhost:8000";
 const PIPELINE_API_KEY = process.env.PIPELINE_API_KEY;
 
-// safe integer parse
 const toInt = (v, d = 50) => {
   const n = Number(v);
   return Number.isFinite(n) && n > 0 ? Math.min(Math.trunc(n), 200) : d;
 };
 
-// small batch runner to limit concurrency
-async function batchMap(items, batchSize, fn) {
-  const out = [];
-  for (let i = 0; i < items.length; i += batchSize) {
-    const batch = items.slice(i, i + batchSize);
-    const results = await Promise.all(batch.map(fn));
-    out.push(...results);
-    await new Promise(r => setTimeout(r, 80));
-  }
-  return out;
-}
-
-// ensure RAWG game exists in games table via gamiq
-async function ensureRawgGame(client, rawgId) {
-  const exists = await client.query(
-    `SELECT 1 FROM games WHERE id = $1 LIMIT 1`,
-    [rawgId]
-  );
-  if (exists.rowCount > 0) return;
-
-  try {
-    await fetch(`${GAMIQ_URL}/games/ensure/${rawgId}`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${PIPELINE_API_KEY}`
-      }
-    });
-  } catch (err) {
-    console.warn(`[trending] Failed to ensure game ${rawgId} via gamiq:`, err.message);
-  }
-}
+// Response cache — 5-minute TTL
+let cachedResponse = null;
+let cachedAt = 0;
+const CACHE_TTL_MS = 5 * 60 * 1000;
 
 router.get("/", async (req, res) => {
   try {
@@ -61,10 +33,15 @@ router.get("/", async (req, res) => {
 
     const autoMatchEnabled = req.query.autoMatch !== "0";
     const autoThreshold = Number(req.query.autoThreshold ?? 0.6);
-    const batchSize = Math.min(Math.max(Number(req.query.batchSize || 8), 1), 32);
+
+    // Serve from cache if fresh
+    if (cachedResponse && Date.now() - cachedAt < CACHE_TTL_MS) {
+      return res.json(cachedResponse.slice(0, limit));
+    }
 
     const client = await pool.connect();
     try {
+      // Phase 1: fetch trending rows
       const trendingSql = `WITH ranked AS (
         SELECT *, ROW_NUMBER() OVER (PARTITION BY steam_id ORDER BY snapshot_time DESC) rn
         FROM steamspy_trending
@@ -77,40 +54,78 @@ router.get("/", async (req, res) => {
       LIMIT $1`;
 
       const { rows } = await client.query(trendingSql, [limit]);
+      const steamIds = rows.map(r => Number(r.steam_id));
 
-      const processed = await batchMap(rows, batchSize, async (row) => {
-        const steamId = Number(row.steam_id);
-        const name = row.name ?? "";
+      // Phase 2: batch-fetch all existing mappings
+      const mappings = await getMappingsBySteamIds(steamIds);
 
-        let mapping = await getMappingBySteamId(steamId).catch(() => null);
-
-        if (!mapping && autoMatchEnabled) {
-          const match = await autoMatchRawg(steamId, name, {
-            threshold: autoThreshold
-          }).catch(() => null);
-
-          if (match?.rawgId) {
-            mapping = await upsertMapping(steamId, String(match.rawgId), {
-              source: "auto",
-              confidence: match.score,
-              metadata: match.candidate
+      // Phase 3: auto-match unmapped (still per-game — calls external RAWG API)
+      if (autoMatchEnabled) {
+        const unmapped = rows.filter(r => !mappings.has(Number(r.steam_id)));
+        for (const row of unmapped) {
+          const sid = Number(row.steam_id);
+          try {
+            const match = await autoMatchRawg(sid, row.name || "", {
+              threshold: autoThreshold
             });
+            if (match?.rawgId) {
+              const saved = await upsertMapping(sid, String(match.rawgId), {
+                source: "auto",
+                confidence: match.score,
+                metadata: match.candidate
+              });
+              mappings.set(sid, saved);
+            }
+          } catch {}
+        }
+      }
+
+      // Phase 4: collect rawg IDs and batch-ensure via gamiq
+      const rawgIdsToEnsure = [];
+      for (const [, mapping] of mappings) {
+        if (mapping?.rawg_id) rawgIdsToEnsure.push(mapping.rawg_id);
+      }
+
+      if (rawgIdsToEnsure.length > 0) {
+        const { rows: existing } = await client.query(
+          `SELECT id FROM games WHERE id = ANY($1)`,
+          [rawgIdsToEnsure.map(Number)]
+        );
+        const existingSet = new Set(existing.map(r => Number(r.id)));
+        const missing = rawgIdsToEnsure.filter(id => !existingSet.has(Number(id)));
+
+        for (const rawgId of missing) {
+          try {
+            await fetch(`${GAMIQ_URL}/games/ensure/${rawgId}`, {
+              method: "POST",
+              headers: { "Authorization": `Bearer ${PIPELINE_API_KEY}` }
+            });
+          } catch (err) {
+            logger.warn("Failed to ensure game %s via gamiq: %s", rawgId, err.message);
           }
         }
+      }
 
-        if (mapping?.rawg_id) {
-          await ensureRawgGame(client, mapping.rawg_id);
+      // Phase 5: batch-fetch all game metadata
+      const allRawgIds = rawgIdsToEnsure.map(Number);
+      let gameMap = new Map();
+      if (allRawgIds.length > 0) {
+        const { rows: gameRows } = await client.query(
+          `SELECT id, slug, released, platforms, background_image
+           FROM games WHERE id = ANY($1)`,
+          [allRawgIds]
+        );
+        for (const g of gameRows) {
+          gameMap.set(Number(g.id), g);
         }
+      }
 
-        let game = null;
-        if (mapping?.rawg_id) {
-          const { rows } = await client.query(
-            `SELECT id, slug, released, platforms, background_image
-             FROM games WHERE id = $1`,
-            [mapping.rawg_id]
-          );
-          game = rows[0] || null;
-        }
+      // Phase 6: assemble response
+      const processed = rows.map(row => {
+        const sid = Number(row.steam_id);
+        const mapping = mappings.get(sid) || null;
+        const rawgId = mapping?.rawg_id ? Number(mapping.rawg_id) : null;
+        const game = rawgId ? gameMap.get(rawgId) || null : null;
 
         return {
           steam_id: String(row.steam_id),
@@ -125,12 +140,15 @@ router.get("/", async (req, res) => {
         };
       });
 
+      cachedResponse = processed;
+      cachedAt = Date.now();
+
       return res.json(processed);
     } finally {
       client.release();
     }
   } catch (err) {
-    console.error("trending-composite error:", err);
+    logger.error({ err }, "trending-composite error");
     return res.status(500).json({ error: "failed to fetch trending" });
   }
 });

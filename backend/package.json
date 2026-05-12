@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "nodemon server.js",
-    "dev": "nodemon server.js"
+    "dev": "nodemon server.js | pino-pretty"
   },
   "keywords": [],
   "author": "",
@@ -30,10 +30,13 @@
     "passport-google-oauth20": "^2.0.0",
     "passport-steam": "^1.0.18",
     "pg": "^8.13.0",
+    "pino": "^10.3.1",
+    "rate-limiter-flexible": "^11.1.0",
     "socket.io": "^4.8.1",
     "undici": "^7.16.0"
   },
   "devDependencies": {
-    "nodemon": "^3.1.11"
+    "nodemon": "^3.1.11",
+    "pino-pretty": "^13.1.3"
   }
 }

@@ -3,15 +3,18 @@ import passport from "passport";
 import bcrypt from "bcryptjs";
 import User from "../models/User.js";
 import { sendOtpEmail } from "../config/emailService.js";
-import otpStore from "../config/optStore.js";
+import otpStore from "../config/otpStore.js";
 import { generateUniqueUsername } from "../utils/generateUsername.js";
+import { USERNAME_REGEX } from "../utils/validation.js";
+import { requireAuth } from "../middleware/requireAuth.js";
+import { strictAuthLimiter, emailLimiter, publicLimiter } from "../middleware/rateLimiter.js";
 
 const router = express.Router();
 
 /* =====================================================
    🔹 USERNAME AVAILABILITY CHECK
 ===================================================== */
-router.get("/check-username/:username", async (req, res) => {
+router.get("/check-username/:username", publicLimiter, async (req, res) => {
   try {
     const exists = await User.exists({ username: req.params.username });
     res.json({ available: !exists });
@@ -70,17 +73,20 @@ router.get(
 /* =====================================================
    🔹 SEND OTP (SIGNUP)
 ===================================================== */
-router.post("/send-otp", async (req, res) => {
+router.post("/send-otp", emailLimiter, async (req, res) => {
   try {
     const { name, email, password, username } = req.body;
 
     if (!name || !email || !password || !username)
       return res.status(400).json({ message: "All fields required" });
 
+    if (!USERNAME_REGEX.test(username))
+      return res.status(400).json({ message: "Username must be 3-20 characters, letters, numbers, underscores, and hyphens only" });
+
     if (await User.exists({ username }))
       return res.status(400).json({ message: "Username already taken" });
 
-    const otp = Math.floor(100000 + Math.random() * 900000);
+    const otp = String(Math.floor(100000 + Math.random() * 900000));
     const expiresAt = Date.now() + 5 * 60 * 1000;
 
     otpStore.set(email, {
@@ -99,14 +105,14 @@ router.post("/send-otp", async (req, res) => {
 /* =====================================================
    🔹 VERIFY OTP
 ===================================================== */
-router.post("/verify-otp", async (req, res) => {
+router.post("/verify-otp", strictAuthLimiter, async (req, res) => {
   try {
     const { email, otp } = req.body;
     const record = otpStore.get(email);
 
     if (!record) return res.status(400).json({ message: "OTP expired" });
     if (Date.now() > record.expiresAt) return res.status(400).json({ message: "OTP expired" });
-    if (record.otp !== parseInt(otp)) return res.status(400).json({ message: "Invalid OTP" });
+    if (record.otp !== String(otp)) return res.status(400).json({ message: "Invalid OTP" });
 
     const { name, password, username } = record.userData;
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -143,7 +149,7 @@ router.post("/verify-otp", async (req, res) => {
 /* =====================================================
    🔹 NATIVE LOGIN (EMAIL OR USERNAME)
 ===================================================== */
-router.post("/login", async (req, res) => {
+router.post("/login", strictAuthLimiter, async (req, res) => {
   try {
     const { identifier, password } = req.body;
 
@@ -171,8 +177,7 @@ router.post("/login", async (req, res) => {
 /* =====================================================
    🔹 CURRENT USER
 ===================================================== */
-router.get("/user", (req, res) => {
-  if (!req.user) return res.status(401).json({ error: "Not logged in" });
+router.get("/user", requireAuth, (req, res) => {
   res.json(req.user);
 });
 
@@ -191,7 +196,7 @@ router.post("/logout", (req, res) => {
 /* =====================================================
    🔹 FORGOT / RESET PASSWORD
 ===================================================== */
-router.post("/forgot-password", async (req, res) => {
+router.post("/forgot-password", emailLimiter, async (req, res) => {
   const { email } = req.body;
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
@@ -201,11 +206,11 @@ router.post("/forgot-password", async (req, res) => {
   res.json({ message: "OTP sent" });
 });
 
-router.post("/reset-password", async (req, res) => {
+router.post("/reset-password", strictAuthLimiter, async (req, res) => {
   const { email, otp, newPassword } = req.body;
   const entry = otpStore.get(email);
 
-  if (!entry || entry.otp !== otp) return res.status(400).json({ message: "Invalid OTP" });
+  if (!entry || entry.otp !== String(otp)) return res.status(400).json({ message: "Invalid OTP" });
 
   const user = await User.findOne({ email });
   const hash = await bcrypt.hash(newPassword, 10);

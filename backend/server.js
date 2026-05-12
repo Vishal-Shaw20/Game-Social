@@ -11,6 +11,9 @@ import passport from "passport";
 import dotenv from "dotenv";
 
 import connectDB from "./config/db.js";
+import User from "./models/User.js";
+import logger from "./config/logger.js";
+import { apiLimiter } from "./middleware/rateLimiter.js";
 import "./strategies/google.js";
 import "./strategies/steam.js";
 
@@ -33,6 +36,7 @@ dotenv.config();
 /* ---------------- APP ---------------- */
 
 const app = express();
+app.set("trust proxy", 1);
 const server = http.createServer(app);
 const PORT = process.env.PORT || 5000;
 
@@ -53,7 +57,7 @@ app.use(
       if (!origin) return callback(null, true);
       if (allowedOrigins.includes(origin)) return callback(null, true);
 
-      console.error("❌ Blocked by CORS:", origin);
+      logger.warn("Blocked by CORS: %s", origin);
       return callback(new Error("Not allowed by CORS"));
     },
     credentials: true
@@ -68,25 +72,24 @@ app.use(express.urlencoded({ extended: true }));
 
 /* ---------------- SESSION ---------------- */
 
-app.use(
-  session({
-    name: "connect.sid",
-    secret: process.env.SESSION_SECRET,
-    resave: false,
-    saveUninitialized: false,
-    store: MongoStore.create({
-      mongoUrl: process.env.MONGO_URI,
-      collectionName: "sessions"
-    }),
-    cookie: {
-      maxAge: 1000 * 60 * 60 * 24 * 7,
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax"
-    }
+const sessionMiddleware = session({
+  name: "connect.sid",
+  secret: process.env.SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false,
+  store: MongoStore.create({
+    mongoUrl: process.env.MONGO_URI,
+    collectionName: "sessions"
+  }),
+  cookie: {
+    maxAge: 1000 * 60 * 60 * 24 * 7,
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax"
+  }
+});
 
-  })
-);
+app.use(sessionMiddleware);
 
 /* ---------------- PASSPORT ---------------- */
 
@@ -113,7 +116,7 @@ import profileRoutes from "./routes/profile.js";
 app.use("/api/profile", profileRoutes);
 
 app.use("/auth", authRoutes);
-app.use("/api", apiRoutes);
+app.use("/api", apiLimiter, apiRoutes);
 app.use("/api/gameLookup", gameLookup);
 app.use("/api/trending", trending);
 app.use("/api/reviews", reviewRoutes);
@@ -141,12 +144,25 @@ const io = new Server(server, {
   }
 });
 
+io.engine.use(sessionMiddleware);
+
 io.use((socket, next) => {
-  const passportSession = socket.request.session?.passport;
-  if (passportSession?.user) {
-    socket.handshake.auth.user = passportSession.user;
+  const sess = socket.request.session;
+  if (!sess?.passport?.user) {
+    return next(new Error("Authentication required"));
   }
-  next();
+
+  User.findById(sess.passport.user)
+    .select("_id username displayName avatar")
+    .lean()
+    .then(user => {
+      if (!user) {
+        return next(new Error("User not found"));
+      }
+      socket.user = user;
+      next();
+    })
+    .catch(() => next(new Error("Authentication failed")));
 });
 
 socketHandlers(io);
@@ -157,19 +173,19 @@ async function main() {
   try {
     
     await connectDB();
-    console.log("✅ All DBs connected");
+    logger.info("All DBs connected");
 
     startCron({ runImmediately: true });
-    console.log("✅ Trending cron started");
+    logger.info("Trending cron started");
 
     startRawgCron({ runImmediately: false });
 
     server.listen(PORT, () => {
-      console.log(`🚀 Server running on port ${PORT}`);
-      console.log("🔌 Socket.IO ready");
+      logger.info("Server running on port %d", PORT);
+      logger.info("Socket.IO ready");
     });
   } catch (err) {
-    console.error("❌ Startup failure:", err);
+    logger.error({ err }, "Startup failure");
     process.exit(1);
   }
 }

@@ -12,6 +12,7 @@
 # ================================================================
 
 import os
+import logging
 import psycopg2
 from sentence_transformers import SentenceTransformer
 from psycopg2.extras import execute_values
@@ -21,6 +22,8 @@ import torch
 
 from recommender.config import DB_CONFIG
 from recommender.text_builder import clean_field, build_structured_text as _build_text
+
+logger = logging.getLogger(__name__)
 
 MODEL_NAME = "BAAI/bge-large-en-v1.5"
 END_ID = 1100000
@@ -45,8 +48,8 @@ def row_to_structured_text(row):
 
 def main():
 
-    print(f"Device: {DEVICE} | Encode batch: {ENCODE_BATCH} | Fetch batch: {FETCH_BATCH}")
-    print("Connecting to database...")
+    logger.info("Device: %s | Encode batch: %d | Fetch batch: %d", DEVICE, ENCODE_BATCH, FETCH_BATCH)
+    logger.info("Connecting to database...")
     conn = psycopg2.connect(**DB_CONFIG)
     cur = conn.cursor()
 
@@ -57,24 +60,24 @@ def main():
     max_game = cur.fetchone()[0] or 0
 
     if max_embedded >= max_game:
-        print("Truncating content_embeddings for fresh rebuild...")
+        logger.info("Truncating content_embeddings for fresh rebuild...")
         cur.execute("TRUNCATE content_embeddings;")
         conn.commit()
         start_id = 0
     elif max_embedded > 0:
         start_id = max_embedded
-        print(f"Resuming from game_id > {start_id}")
+        logger.info("Resuming from game_id > %d", start_id)
     else:
         start_id = 0
-        print("Starting fresh (empty table)")
+        logger.info("Starting fresh (empty table)")
 
     cur.close()
     conn.close()
 
-    print("Loading model...")
+    logger.info("Loading model...")
     model = SentenceTransformer(MODEL_NAME, device=DEVICE)
 
-    print("Connecting to database...")
+    logger.info("Connecting to database...")
     read_conn = psycopg2.connect(**DB_CONFIG)
     write_conn = psycopg2.connect(**DB_CONFIG)
 
@@ -89,7 +92,7 @@ def main():
     total_rows = count_cur.fetchone()[0]
     count_cur.close()
 
-    print(f"Rows to process: {total_rows}")
+    logger.info("Rows to process: %d", total_rows)
 
     progress = tqdm(total=total_rows, desc="Processing")
 
@@ -161,11 +164,11 @@ def main():
     read_conn.close()
     write_conn.close()
 
-    print("\n==============================")
-    print("Embedding rebuild finished")
-    print(f"Rows inserted in this run: {inserted_total}")
-    print(f"Last processed id: {last_id}")
-    print("==============================")
+    logger.info("\n==============================")
+    logger.info("Embedding rebuild finished")
+    logger.info("Rows inserted in this run: %d", inserted_total)
+    logger.info("Last processed id: %d", last_id)
+    logger.info("==============================")
 
 if __name__ == "__main__":
     main()
@@ -247,7 +250,7 @@ if __name__ == "__main__":
 # def main():
 #
 #     print(f"Device: {DEVICE} | Encode batch: {ENCODE_BATCH} | Fetch batch: {FETCH_BATCH}")
-#     print("Connecting to database...")
+#     logger.info("Connecting to database...")
 #     conn = psycopg2.connect(**DB_CONFIG)
 #     cur = conn.cursor()
 #
@@ -258,24 +261,24 @@ if __name__ == "__main__":
 #     max_game = cur.fetchone()[0] or 0
 #
 #     if max_embedded >= max_game:
-#         print("Truncating content_embeddings for fresh rebuild...")
+#         logger.info("Truncating content_embeddings for fresh rebuild...")
 #         cur.execute("TRUNCATE content_embeddings;")
 #         conn.commit()
 #         start_id = 0
 #     elif max_embedded > 0:
 #         start_id = max_embedded
-#         print(f"Resuming from game_id > {start_id}")
+#         logger.info("Resuming from game_id > %d", start_id)
 #     else:
 #         start_id = 0
-#         print("Starting fresh (empty table)")
+#         logger.info("Starting fresh (empty table)")
 #
 #     cur.close()
 #     conn.close()
 #
-#     print("Loading model...")
+#     logger.info("Loading model...")
 #     model = SentenceTransformer(MODEL_NAME, device=DEVICE)
 #
-#     print("Connecting to database...")
+#     logger.info("Connecting to database...")
 #     read_conn = psycopg2.connect(**DB_CONFIG)
 #     write_conn = psycopg2.connect(**DB_CONFIG)
 #
@@ -290,7 +293,7 @@ if __name__ == "__main__":
 #     total_rows = count_cur.fetchone()[0]
 #     count_cur.close()
 #
-#     print(f"Rows to process: {total_rows}")
+#     logger.info("Rows to process: %d", total_rows)
 #
 #     progress = tqdm(total=total_rows, desc="Processing")
 #
@@ -447,7 +450,7 @@ if __name__ == "__main__":
 # def main():
 #
 #     print(f"Device: {DEVICE} | Encode batch: {ENCODE_BATCH} | Fetch batch: {FETCH_BATCH}")
-#     print("Connecting to database...")
+#     logger.info("Connecting to database...")
 #     conn = psycopg2.connect(**DB_CONFIG)
 #     cur = conn.cursor()
 #
@@ -458,24 +461,24 @@ if __name__ == "__main__":
 #     max_game = cur.fetchone()[0] or 0
 #
 #     if max_embedded >= max_game:
-#         print("Truncating content_embeddings for fresh rebuild...")
+#         logger.info("Truncating content_embeddings for fresh rebuild...")
 #         cur.execute("TRUNCATE content_embeddings;")
 #         conn.commit()
 #         start_id = 0
 #     elif max_embedded > 0:
 #         start_id = max_embedded
-#         print(f"Resuming from game_id > {start_id}")
+#         logger.info("Resuming from game_id > %d", start_id)
 #     else:
 #         start_id = 0
-#         print("Starting fresh (empty table)")
+#         logger.info("Starting fresh (empty table)")
 #
 #     cur.close()
 #     conn.close()
 #
-#     print("Loading model...")
+#     logger.info("Loading model...")
 #     model = SentenceTransformer(MODEL_NAME, device=DEVICE)
 #
-#     print("Connecting to database...")
+#     logger.info("Connecting to database...")
 #     read_conn = psycopg2.connect(**DB_CONFIG)
 #     write_conn = psycopg2.connect(**DB_CONFIG)
 #
@@ -490,7 +493,7 @@ if __name__ == "__main__":
 #     total_rows = count_cur.fetchone()[0]
 #     count_cur.close()
 #
-#     print(f"Rows to process: {total_rows}")
+#     logger.info("Rows to process: %d", total_rows)
 #
 #     progress = tqdm(total=total_rows, desc="Processing")
 #

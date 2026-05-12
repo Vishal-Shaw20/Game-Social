@@ -56,7 +56,12 @@ export function useSocket(authChecked, isAuthenticated, currentUser) {
     });
 
     socket.on("connect_error", (err) => {
-      console.error("[useSocket] connect_error:", err);
+      console.error("[useSocket] connect_error:", err.message);
+      if (err.message === "Authentication required") {
+        socket.disconnect();
+        socketRef.current = null;
+        setConnected(false);
+      }
     });
 
     // ❌ IMPORTANT: NO cleanup disconnect here

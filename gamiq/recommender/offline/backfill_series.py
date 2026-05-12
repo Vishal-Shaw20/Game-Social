@@ -1,7 +1,10 @@
+import logging
 import psycopg2
 from psycopg2.extras import execute_values
 from recommender.config import DB_CONFIG
 from recommender.rawg_client import rawg_get, fetch_series_for_game
+
+logger = logging.getLogger(__name__)
 
 BATCH_SIZE = 50
 
@@ -22,7 +25,7 @@ def run_backfill():
     """)
     game_ids = [row[0] for row in cur.fetchall()]
 
-    print(f"Games to process: {len(game_ids)}")
+    logger.info("Games to process: %d", len(game_ids))
 
     batch_rows = []
     processed = 0
@@ -49,11 +52,11 @@ def run_backfill():
                 conn.commit()
                 batch_rows = []
 
-            print(f"Progress: {processed}/{len(game_ids)} | last: {gid}")
+            logger.info("Progress: %d/%d | last: %d", processed, len(game_ids), gid)
 
     cur.close()
     conn.close()
-    print("Backfill complete.")
+    logger.info("Backfill complete.")
 
 
 if __name__ == "__main__":

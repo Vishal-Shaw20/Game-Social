@@ -1,0 +1,121 @@
+.container {
+  background: #0b0f16;
+  color: #e6edf3;
+  min-height: 100vh;
+}
+
+.sectionInner {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.backButton {
+  position: fixed;
+  top: 24px;
+  left: 24px;
+  z-index: 30;
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: white;
+  padding: 10px 18px;
+  border-radius: 999px;
+  cursor: pointer;
+  margin-top: 20px;
+}
+
+.hero {
+  height: 560px;
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  background-size: cover;
+  background-position: center;
+}
+
+.heroOverlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to top,
+    rgba(11, 15, 22, 1) 0%,
+    rgba(11, 15, 22, 0.7) 40%,
+    rgba(11, 15, 22, 0.25) 65%,
+    transparent 85%
+  );
+}
+
+.heroContent {
+  position: relative;
+  z-index: 2;
+  padding: 0 64px 64px;
+  max-width: 800px;
+}
+
+.heroDashes {
+  position: absolute;
+  bottom: 26px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+}
+
+.dash {
+  all: unset;
+  width: 22px;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.35);
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.dashActive {
+  width: 34px;
+  background: linear-gradient(90deg, #58a6ff, #79c0ff);
+}
+
+.section {
+  padding: 48px 64px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.descWrap {
+  position: relative;
+}
+
+.desc {
+  line-height: 1.8;
+  font-size: 16px;
+  max-height: 240px;
+  overflow: hidden;
+  transition: max-height 0.6s ease;
+}
+
+.descOpen {
+  max-height: 3000px;
+}
+
+.descVignette {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 120px;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    rgba(11, 15, 22, 0) 0%,
+    rgba(11, 15, 22, 0.6) 40%,
+    rgba(11, 15, 22, 0.85) 70%,
+    rgba(11, 15, 22, 1) 100%
+  );
+}
+
+.toggle {
+  all: unset;
+  margin-top: 24px;
+  color: #79c0ff;
+  cursor: pointer;
+}

@@ -4,11 +4,14 @@ import numpy as np
 from psycopg2.pool import ThreadedConnectionPool
 import math
 import time
+import logging
 
 from recommender.config import DB_CONFIG, ARTIFACTS_DIR
 from recommender.inference.reranker import rerank
 from recommender.text_builder import clean_field, build_structured_text
 from recommender.cache import get_cached, set_cached
+
+logger = logging.getLogger(__name__)
 
 # -------------------- DB CONNECTION POOL --------------------
 
@@ -26,7 +29,7 @@ try:
     ivf_index        = faiss.downcast_index(index.index)
     ivf_index.nprobe = 256
 except Exception as e:
-    print(f"Warning: could not set nprobe: {e}")
+    logger.warning("Could not set nprobe: %s", e)
 
 
 # -------------------- TEXT BUILD --------------------
@@ -246,7 +249,7 @@ def get_recommendations(game_id: int, k: int = 10, max_per_series: int = 3):
 
     cached = get_cached(game_id, k, max_per_series)
     if cached is not None:
-        print(f"[TIMING] Cache HIT for game_id={game_id}")
+        logger.info("Cache HIT for game_id=%s", game_id)
         return cached
 
     t0 = time.perf_counter()
@@ -270,7 +273,7 @@ def get_recommendations(game_id: int, k: int = 10, max_per_series: int = 3):
             faiss_scores_dict[cid] = float(score)
 
     t1 = time.perf_counter()
-    print(f"[TIMING] FAISS search + series lookup: {t1 - t0:.2f}s")
+    logger.info("FAISS search + series lookup: %.2fs", t1 - t0)
 
     # Combine FAISS results and series IDs
     all_to_fetch = list(set(faiss_candidates) | series_ids)
@@ -330,7 +333,7 @@ def get_recommendations(game_id: int, k: int = 10, max_per_series: int = 3):
     candidate_ids = candidate_ids[:100]
 
     t2 = time.perf_counter()
-    print(f"[TIMING] Quality filter DB + Series wait: {t2 - t1:.2f}s | candidates: {len(candidate_ids)}")
+    logger.info("Quality filter DB + Series wait: %.2fs | candidates: %d", t2 - t1, len(candidate_ids))
 
     if not candidate_ids:
         return []
@@ -350,12 +353,12 @@ def get_recommendations(game_id: int, k: int = 10, max_per_series: int = 3):
     ]
 
     t3 = time.perf_counter()
-    print(f"[TIMING] Text fetch: {t3 - t2:.2f}s | pairs for reranker: {len(candidates)}")
+    logger.info("Text fetch: %.2fs | pairs for reranker: %d", t3 - t2, len(candidates))
 
     reranked = rerank(query_text, candidates, 50)
 
     t4 = time.perf_counter()
-    print(f"[TIMING] Reranker: {t4 - t3:.2f}s")
+    logger.info("Reranker: %.2fs", t4 - t3)
 
     # ---- QUALITY SCORING + FILTERING ----
 
@@ -363,8 +366,8 @@ def get_recommendations(game_id: int, k: int = 10, max_per_series: int = 3):
     result = apply_filters(ranked, game_meta, series_ids, query_name, query_genres, k, max_per_series)
 
     t5 = time.perf_counter()
-    print(f"[TIMING] Scoring + filter: {t5 - t4:.2f}s")
-    print(f"[TIMING] TOTAL: {t5 - t0:.2f}s")
+    logger.info("Scoring + filter: %.2fs", t5 - t4)
+    logger.info("TOTAL: %.2fs", t5 - t0)
 
     set_cached(game_id, k, max_per_series, result)
     return result

@@ -41,6 +41,22 @@ export async function getMappingBySteamId(steamId) {
   return rows[0] ?? null;
 }
 
+export async function getMappingsBySteamIds(steamIds) {
+  if (!steamIds.length) return new Map();
+  const pool = getPG();
+  if (!pool) throw new Error("Postgres pool not available");
+  const { rows } = await pool.query(
+    `SELECT steam_id, rawg_id, source, confidence, metadata
+     FROM steam_rawg_map WHERE steam_id = ANY($1)`,
+    [steamIds]
+  );
+  const map = new Map();
+  for (const r of rows) {
+    map.set(Number(r.steam_id), r);
+  }
+  return map;
+}
+
 // DATABASE: set or update mapping
 export async function upsertMapping(steamId, rawgId, opts = {}) {
   const { source = "manual", confidence = 1.0, metadata = null } = opts;

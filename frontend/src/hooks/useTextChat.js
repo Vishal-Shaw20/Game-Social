@@ -5,6 +5,7 @@ export function useTextChat(socket, connected, roomId, currentUser, requireLogin
   const [joined, setJoined] = useState(false);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
+  const [sendError, setSendError] = useState(null);
 
   const socketRef = useRef(socket);
   const roomRef = useRef(roomId);
@@ -120,6 +121,10 @@ const send = useCallback((e) => {
 
   socketRef.current.emit("send-msg", payload, (ack) => {
     console.log("[textchat] send-msg ACK:", ack);
+    if (ack?.error === "rate_limited") {
+      setSendError("You're sending messages too fast. Please wait a moment.");
+      setTimeout(() => setSendError(null), ack.retryMs || 5000);
+    }
   });
 
   setInput("");
@@ -132,6 +137,7 @@ const send = useCallback((e) => {
     setInput,
     join,
     leave,
-    send
+    send,
+    sendError
   };
 }

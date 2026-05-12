@@ -1,0 +1,12 @@
+.homepage {
+  padding: 75px;
+  padding-top: 0;
+  color: #e5e7eb;
+  background: transparent;
+}
+
+.header {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 30px;
+}

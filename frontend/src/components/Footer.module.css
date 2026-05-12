@@ -1,0 +1,41 @@
+.appFooter {
+  width: 100%;
+  padding: 28px 48px;
+  box-sizing: border-box;
+  background: linear-gradient(
+    to top,
+    rgba(5, 7, 12, 0.85),
+    rgba(5, 7, 12, 0.55)
+  );
+  backdrop-filter: blur(12px);
+  border-top: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.footerInner {
+  width: 100%;
+  max-width: 1600px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  line-height: 1.8;
+  color: #94a3b8;
+  letter-spacing: 0.05em;
+}
+
+.footerRight {
+  opacity: 0.85;
+}
+
+@media (max-width: 768px) {
+  .appFooter {
+    padding: 24px 20px;
+  }
+
+  .footerInner {
+    flex-direction: column;
+    gap: 10px;
+    text-align: center;
+  }
+}
