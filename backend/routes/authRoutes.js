@@ -3,7 +3,7 @@ import passport from "passport";
 import bcrypt from "bcryptjs";
 import User from "../models/User.js";
 import { sendOtpEmail } from "../config/emailService.js";
-import otpStore from "../config/otpStore.js";
+import { setOtp, getOtp, deleteOtp } from "../config/otpStore.js";
 import { generateUniqueUsername } from "../utils/generateUsername.js";
 import { USERNAME_REGEX } from "../utils/validation.js";
 import { requireAuth } from "../middleware/requireAuth.js";
@@ -89,7 +89,7 @@ router.post("/send-otp", emailLimiter, async (req, res) => {
     const otp = String(Math.floor(100000 + Math.random() * 900000));
     const expiresAt = Date.now() + 5 * 60 * 1000;
 
-    otpStore.set(email, {
+    await setOtp(email, {
       otp,
       expiresAt,
       userData: { name, email, password, username },
@@ -108,7 +108,7 @@ router.post("/send-otp", emailLimiter, async (req, res) => {
 router.post("/verify-otp", strictAuthLimiter, async (req, res) => {
   try {
     const { email, otp } = req.body;
-    const record = otpStore.get(email);
+    const record = await getOtp(email);
 
     if (!record) return res.status(400).json({ message: "OTP expired" });
     if (Date.now() > record.expiresAt) return res.status(400).json({ message: "OTP expired" });
@@ -135,7 +135,7 @@ router.post("/verify-otp", strictAuthLimiter, async (req, res) => {
       await user.save();
     }
 
-    otpStore.delete(email);
+    await deleteOtp(email);
 
     req.login(user, err => {
       if (err) return res.status(500).json({ message: "Login failed" });
@@ -198,28 +198,35 @@ router.post("/logout", (req, res) => {
 ===================================================== */
 router.post("/forgot-password", emailLimiter, async (req, res) => {
   const { email } = req.body;
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-  otpStore.set(email, { otp, expiresAt: Date.now() + 5 * 60 * 1000 });
+  const user = await User.findOne({ email });
+  if (!user) return res.json({ message: "If that email exists, an OTP was sent" });
+
+  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  await setOtp(email, { otp, expiresAt: Date.now() + 5 * 60 * 1000 });
   await sendOtpEmail(email, otp);
 
-  res.json({ message: "OTP sent" });
+  res.json({ message: "If that email exists, an OTP was sent" });
 });
 
 router.post("/reset-password", strictAuthLimiter, async (req, res) => {
   const { email, otp, newPassword } = req.body;
-  const entry = otpStore.get(email);
+  const entry = await getOtp(email);
 
-  if (!entry || entry.otp !== String(otp)) return res.status(400).json({ message: "Invalid OTP" });
+  if (!entry || Date.now() > entry.expiresAt) return res.status(400).json({ message: "OTP expired" });
+  if (entry.otp !== String(otp)) return res.status(400).json({ message: "Invalid OTP" });
 
   const user = await User.findOne({ email });
-  const hash = await bcrypt.hash(newPassword, 10);
+  if (!user) return res.status(400).json({ message: "User not found" });
 
   const native = user.linkedAccounts.find(a => a.provider === "native");
+  if (!native) return res.status(400).json({ message: "This account uses Google/Steam login — no password to reset" });
+
+  const hash = await bcrypt.hash(newPassword, 10);
   native.providerId = hash;
 
   await user.save();
-  otpStore.delete(email);
+  await deleteOtp(email);
 
   res.json({ message: "Password reset successful" });
 });

@@ -37,11 +37,13 @@ export function useAuth() {
 
     refreshAuth();
     window.addEventListener("focus", refreshAuth);
-    window.addEventListener("storage", (e) => e.key === "auth:changed" && refreshAuth());
+    const onStorage = (e) => e.key === "auth:changed" && refreshAuth();
+    window.addEventListener("storage", onStorage);
 
     return () => {
       mounted = false;
       window.removeEventListener("focus", refreshAuth);
+      window.removeEventListener("storage", onStorage);
     };
   }, []);
 

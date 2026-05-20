@@ -28,34 +28,26 @@ export function useTextChat(socket, connected, roomId, currentUser, requireLogin
     ts: msg.ts || msg.created_at || Date.now()
   });
 
-useEffect(() => {
-  const s = socket;
-  if (!s) {
-    console.log("[textchat] socket not ready, skipping listener attach");
-    return;
-  }
+  useEffect(() => {
+    const s = socket;
+    if (!s) return;
 
-  console.log("[textchat] attaching socket listeners");
+    const onHistory = (list) => {
+      setMessages(list.map(normalizeMessage));
+    };
 
-  const onHistory = (list) => {
-    console.log("[textchat] ✅ chat-history received:", list);
-    setMessages(list.map(normalizeMessage));
-  };
+    const onMessage = (msg) => {
+      setMessages((prev) => [...prev, normalizeMessage(msg)]);
+    };
 
-  const onMessage = (msg) => {
-    console.log("[textchat] ✅ message event received:", msg);
-    setMessages((prev) => [...prev, normalizeMessage(msg)]);
-  };
+    s.on("chat-history", onHistory);
+    s.on("message", onMessage);
 
-  s.on("chat-history", onHistory);
-  s.on("message", onMessage);
-
-  return () => {
-    console.log("[textchat] detaching socket listeners");
-    s.off("chat-history", onHistory);
-    s.off("message", onMessage);
-  };
-}, [socket]); // 🔑 THIS IS THE KEY
+    return () => {
+      s.off("chat-history", onHistory);
+      s.off("message", onMessage);
+    };
+  }, [socket]);
 
   const join = useCallback(() => {
     if (!socketRef.current || !connected) return;
@@ -80,55 +72,30 @@ useEffect(() => {
     );
   }, []);
 
-const send = useCallback((e) => {
-  console.log("[textchat] send() called");
+  const send = useCallback((e) => {
+    if (e?.preventDefault) e.preventDefault();
 
-  if (e?.preventDefault) {
-    e.preventDefault();
-    console.log("[textchat] event.preventDefault()");
-  }
+    const text = input.trim();
+    if (!text) return;
+    if (!socketRef.current) return;
+    if (!connected) return;
+    if (triggerLoginIfNeeded()) return;
 
-  const text = input.trim();
-  console.log("[textchat] input value:", input);
+    const payload = {
+      roomId: roomRef.current,
+      text,
+      clientId: crypto.randomUUID(),
+    };
 
-  if (!text) {
-    console.log("[textchat] ❌ empty message, aborting");
-    return;
-  }
+    socketRef.current.emit("send-msg", payload, (ack) => {
+      if (ack?.error === "rate_limited") {
+        setSendError("You're sending messages too fast. Please wait a moment.");
+        setTimeout(() => setSendError(null), ack.retryMs || 5000);
+      }
+    });
 
-  if (!socketRef.current) {
-    console.log("[textchat] ❌ no socket");
-    return;
-  }
-
-  if (!connected) {
-    console.log("[textchat] ❌ socket not connected");
-    return;
-  }
-
-  if (triggerLoginIfNeeded()) {
-    console.log("[textchat] ❌ blocked by login check");
-    return;
-  }
-
-  const payload = {
-    roomId: roomRef.current,
-    text,
-    clientId: crypto.randomUUID(),
-  };
-
-  console.log("[textchat] emitting send-msg with payload:", payload);
-
-  socketRef.current.emit("send-msg", payload, (ack) => {
-    console.log("[textchat] send-msg ACK:", ack);
-    if (ack?.error === "rate_limited") {
-      setSendError("You're sending messages too fast. Please wait a moment.");
-      setTimeout(() => setSendError(null), ack.retryMs || 5000);
-    }
-  });
-
-  setInput("");
-}, [input, connected, triggerLoginIfNeeded]);
+    setInput("");
+  }, [input, connected, triggerLoginIfNeeded]);
 
   return {
     joined,

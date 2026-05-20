@@ -23,8 +23,6 @@ router.get("/:rawgId", async (req, res) => {
       [Number(rawgId)]
     );
 
-    const hasLocalGame = exists.rows.length > 0;
-
 
     const steamAppId = await rawgToSteamAppId(rawgId);
 

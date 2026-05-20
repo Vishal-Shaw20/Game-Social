@@ -1,5 +1,6 @@
 import dns from "dns";
-dns.setDefaultResultOrder("ipv4first");import steamAutoSync from "./middleware/SteamAutoSync.js";
+dns.setDefaultResultOrder("ipv4first");
+import steamAutoSync from "./middleware/SteamAutoSync.js";
 import express from "express";
 import http from "http";
 import { Server } from "socket.io";
@@ -85,7 +86,7 @@ const sessionMiddleware = session({
     maxAge: 1000 * 60 * 60 * 24 * 7,
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax"
+    sameSite: process.env.NODE_ENV === "production" ? "lax" : "lax"
   }
 });
 

@@ -7,10 +7,8 @@ export function useSocket(authChecked, isAuthenticated, currentUser) {
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
-    // ❌ Never disconnect on re-render
     if (!authChecked || !isAuthenticated) {
       if (socketRef.current) {
-        console.log("[useSocket] auth lost → disconnect");
         socketRef.current.disconnect();
         socketRef.current = null;
         setConnected(false);
@@ -18,15 +16,12 @@ export function useSocket(authChecked, isAuthenticated, currentUser) {
       return;
     }
 
-    // ✅ Already connected → do nothing
     if (socketRef.current) {
       return;
     }
 
     const url =
       import.meta.env.VITE_SOCKET_URL?.trim() || window.location.origin;
-
-    console.log("[useSocket] creating socket");
 
     const socket = io(url, {
       transports: ["websocket"],
@@ -46,17 +41,14 @@ export function useSocket(authChecked, isAuthenticated, currentUser) {
     socketRef.current = socket;
 
     socket.on("connect", () => {
-      console.log("[useSocket] ✅ socket connected:", socket.id);
       setConnected(true);
     });
 
-    socket.on("disconnect", (reason) => {
-      console.log("[useSocket] ❌ socket disconnected:", reason);
+    socket.on("disconnect", () => {
       setConnected(false);
     });
 
     socket.on("connect_error", (err) => {
-      console.error("[useSocket] connect_error:", err.message);
       if (err.message === "Authentication required") {
         socket.disconnect();
         socketRef.current = null;
@@ -64,11 +56,8 @@ export function useSocket(authChecked, isAuthenticated, currentUser) {
       }
     });
 
-    // ❌ IMPORTANT: NO cleanup disconnect here
-    return () => {
-      console.log("[useSocket] component unmount (no disconnect)");
-    };
-  }, [authChecked, isAuthenticated]); // 🔑 ONLY THESE
+    return () => {};
+  }, [authChecked, isAuthenticated]);
 
   return {
     socket: socketRef.current,

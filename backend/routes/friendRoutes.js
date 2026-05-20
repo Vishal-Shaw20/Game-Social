@@ -100,4 +100,31 @@ router.get("/activity", async (req, res) => {
 
 
 
+router.delete("/remove/:userId", writeLimiter, async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    if (req.user._id.equals(userId)) {
+      return res.status(400).json({ error: "Cannot remove yourself" });
+    }
+
+    const me = await User.findById(req.user._id);
+    const other = await User.findById(userId);
+
+    if (!other) return res.status(404).json({ error: "User not found" });
+
+    me.friends.pull(userId);
+    other.friends.pull(me._id);
+    await me.save();
+    await other.save();
+
+    res.json({ ok: true });
+  } catch (err) {
+    logger.error({ err }, "remove friend failed");
+    res.status(500).json({ error: "Failed to remove friend" });
+  }
+});
+
+
+
 export default router;

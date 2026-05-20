@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import DOMPurify from "dompurify";
 import GameChat from "../components/GameChat";
 import GameReviews from "../components/GameReviews";
 import styles from "./GameDetails.module.css";
@@ -221,7 +222,7 @@ export default function GameDetails() {
             className={`${styles.desc} ${
               showFullDesc || !shouldTruncate ? styles.descOpen : ""
             }`}
-            dangerouslySetInnerHTML={{ __html: game.description }}
+            dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(game.description) }}
           />
 
           {!showFullDesc && shouldTruncate && (

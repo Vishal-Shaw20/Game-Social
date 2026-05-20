@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import DOMPurify from "dompurify";
 
 function RAWGTest() {
   const [game, setGame] = useState(null);
@@ -36,7 +37,7 @@ function RAWGTest() {
 
           <h4>Description:</h4>
           <div
-            dangerouslySetInnerHTML={{ __html: game.description }}
+            dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(game.description) }}
             style={{ maxWidth: "600px" }}
           />
 
