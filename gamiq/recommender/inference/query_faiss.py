@@ -15,21 +15,31 @@ logger = logging.getLogger(__name__)
 
 # -------------------- DB CONNECTION POOL --------------------
 
-db_pool = ThreadedConnectionPool(
-    minconn=1,
-    maxconn=10,
-    **DB_CONFIG
-)
+_db_pool = None
 
 # -------------------- FAISS --------------------
 
-index = faiss.read_index(str(ARTIFACTS_DIR / "faiss_index.ivf"))
+_index = None
 
-try:
-    ivf_index        = faiss.downcast_index(index.index)
-    ivf_index.nprobe = 256
-except Exception as e:
-    logger.warning("Could not set nprobe: %s", e)
+
+def _ensure_loaded():
+    global _db_pool, _index
+    if _db_pool is not None:
+        return
+
+    _db_pool = ThreadedConnectionPool(
+        minconn=1,
+        maxconn=10,
+        **DB_CONFIG
+    )
+
+    _index = faiss.read_index(str(ARTIFACTS_DIR / "faiss_index.ivf"))
+
+    try:
+        ivf_index        = faiss.downcast_index(_index.index)
+        ivf_index.nprobe = 256
+    except Exception as e:
+        logger.warning("Could not set nprobe: %s", e)
 
 
 # -------------------- TEXT BUILD --------------------
@@ -49,7 +59,8 @@ def row_to_structured_text(row):
 # -------------------- DB FETCH FUNCTIONS --------------------
 
 def fetch_embedding_from_db(game_id: int):
-    conn = db_pool.getconn()
+    _ensure_loaded()
+    conn = __db_pool.getconn()
     try:
         cur = conn.cursor()
         cur.execute(
@@ -59,7 +70,7 @@ def fetch_embedding_from_db(game_id: int):
         row = cur.fetchone()
         cur.close()
     finally:
-        db_pool.putconn(conn)
+        _db_pool.putconn(conn)
 
     if not row:
         return None
@@ -70,7 +81,8 @@ def fetch_embedding_from_db(game_id: int):
 
 
 def fetch_game_text(game_id: int) -> str | None:
-    conn = db_pool.getconn()
+    _ensure_loaded()
+    conn = _db_pool.getconn()
     try:
         cur = conn.cursor()
         cur.execute("""
@@ -82,7 +94,7 @@ def fetch_game_text(game_id: int) -> str | None:
         row = cur.fetchone()
         cur.close()
     finally:
-        db_pool.putconn(conn)
+        _db_pool.putconn(conn)
 
     if not row:
         return None
@@ -90,7 +102,8 @@ def fetch_game_text(game_id: int) -> str | None:
 
 
 def fetch_candidate_texts(game_ids: list[int]) -> dict[int, str]:
-    conn = db_pool.getconn()
+    _ensure_loaded()
+    conn = _db_pool.getconn()
     try:
         cur = conn.cursor()
         cur.execute("""
@@ -102,7 +115,7 @@ def fetch_candidate_texts(game_ids: list[int]) -> dict[int, str]:
         rows = cur.fetchall()
         cur.close()
     finally:
-        db_pool.putconn(conn)
+        _db_pool.putconn(conn)
 
     result = {}
     for row in rows:
@@ -113,7 +126,8 @@ def fetch_candidate_texts(game_ids: list[int]) -> dict[int, str]:
 # -------------------- SERIES LOOKUP --------------------
 
 def fetch_series_ids(game_id: int) -> set:
-    conn = db_pool.getconn()
+    _ensure_loaded()
+    conn = _db_pool.getconn()
     try:
         cur = conn.cursor()
         cur.execute(
@@ -123,7 +137,7 @@ def fetch_series_ids(game_id: int) -> set:
         series_ids = {row[0] for row in cur.fetchall()}
         cur.close()
     finally:
-        db_pool.putconn(conn)
+        _db_pool.putconn(conn)
 
     return series_ids
 
@@ -252,6 +266,7 @@ def get_recommendations(game_id: int, k: int = 10, max_per_series: int = 3):
         logger.info("Cache HIT for game_id=%s", game_id)
         return cached
 
+    _ensure_loaded()
     t0 = time.perf_counter()
 
     # ---- STAGE 1: FAISS retrieval + SERIES LOOKUP ----
@@ -262,7 +277,7 @@ def get_recommendations(game_id: int, k: int = 10, max_per_series: int = 3):
     if query is None:
         return []
 
-    scores, returned_ids = index.search(query, 500)
+    scores, returned_ids = _index.search(query, 500)
 
     faiss_candidates = []
     faiss_scores_dict = {}
@@ -280,7 +295,7 @@ def get_recommendations(game_id: int, k: int = 10, max_per_series: int = 3):
 
     # ---- QUALITY FILTER + METADATA (single query) ----
 
-    conn = db_pool.getconn()
+    conn = _db_pool.getconn()
     try:
         cur = conn.cursor()
 
@@ -310,7 +325,7 @@ def get_recommendations(game_id: int, k: int = 10, max_per_series: int = 3):
             }
         cur.close()
     finally:
-        db_pool.putconn(conn)
+        _db_pool.putconn(conn)
 
     # Construct final candidate_ids (prioritize series_ids, cap to 100)
     candidate_ids = []
