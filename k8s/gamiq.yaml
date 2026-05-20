@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gamiq
+  namespace: gamesocial
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: gamiq
+  template:
+    metadata:
+      labels:
+        app: gamiq
+    spec:
+      # Uncomment imagePullSecrets if your repo is PRIVATE
+      # imagePullSecrets:
+      #   - name: ghcr-secret
+      containers:
+        - name: gamiq
+          image: ghcr.io/vishal-shaw20/gamesocial-gamiq:latest
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - secretRef:
+                name: gamiq-secrets
+          env:
+            - name: REDIS_URL
+              value: "redis://redis.gamesocial.svc.cluster.local:6379/0"
+          volumeMounts:
+            - name: gamiq-artifacts
+              mountPath: /app/recommender/artifacts
+          resources:
+            requests:
+              memory: "400Mi"
+              cpu: "200m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+      volumes:
+        - name: gamiq-artifacts
+          persistentVolumeClaim:
+            claimName: gamiq-artifacts-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gamiq
+  namespace: gamesocial
+spec:
+  selector:
+    app: gamiq
+  ports:
+    - port: 8000
+      targetPort: 8000

@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: gamesocial
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      # Uncomment imagePullSecrets if your repo is PRIVATE
+      # imagePullSecrets:
+      #   - name: ghcr-secret
+      containers:
+        - name: backend
+          image: ghcr.io/vishal-shaw20/gamesocial-backend:latest
+          ports:
+            - containerPort: 5000
+          envFrom:
+            - secretRef:
+                name: backend-secrets
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: GAMIQ_URL
+              value: "http://gamiq.gamesocial.svc.cluster.local:8000"
+          resources:
+            requests:
+              memory: "150Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: gamesocial
+spec:
+  selector:
+    app: backend
+  ports:
+    - port: 5000
+      targetPort: 5000
