@@ -216,7 +216,7 @@ EXPOSE 5000
 CMD ["node", "server.js"]
 ```
 
-Deployed alongside frontend, gamiq, and Redis via Docker Compose on EC2. See the root `docker-compose.yml` and `.github/workflows/deploy.yml` for the full setup.
+Deployed alongside frontend, gamiq, and Redis via Kubernetes on Oracle Cloud ARM64. See `k8s/backend.yaml` for the deployment manifest and `.github/workflows/deploy.yml` for CI/CD.
 
 ## Part of GameSocial
 

@@ -17,9 +17,41 @@ spec:
   tls:
     - hosts:
         - game-social.cc
+        - www.game-social.cc
       secretName: gamesocial-tls
   rules:
     - host: game-social.cc
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 5000
+          - path: /auth
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 5000
+          - path: /socket.io
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 5000
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80
+    - host: www.game-social.cc
       http:
         paths:
           - path: /api

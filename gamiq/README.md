@@ -213,7 +213,9 @@ EXPOSE 8000
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
-FAISS index and ONNX reranker artifacts are mounted via a persistent Docker volume (`gamiq-artifacts`). No local ML model download at runtime — embeddings use the HuggingFace Inference API, and the reranker runs via ONNX.
+FAISS index and ONNX reranker artifacts are mounted via a Kubernetes PersistentVolume (hostPath on the Oracle instance). No local ML model download at runtime — embeddings use the HuggingFace Inference API, and the reranker runs via ONNX.
+
+Deployed alongside frontend, backend, and Redis via Kubernetes on Oracle Cloud ARM64. See `k8s/gamiq.yaml` for the deployment manifest.
 
 ## Part of GameSocial
 

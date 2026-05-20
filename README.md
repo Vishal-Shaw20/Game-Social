@@ -41,7 +41,7 @@ A gaming social platform where players discover games, sync their Steam librarie
 | Backend | Node.js 20, Express, Passport.js, Socket.IO, Mongoose, node-pg, Pino, Helmet, node-cron |
 | ML Backend | Python 3.13, FastAPI, FAISS, sentence-transformers, ONNX Runtime, Redis |
 | Databases | MongoDB (users, sessions, reviews, libraries), PostgreSQL + pgvector (games, embeddings, chat) |
-| Infrastructure | Docker Compose, nginx, Redis 7, Let's Encrypt (certbot), GitHub Actions CI/CD |
+| Infrastructure | Kubernetes (kubeadm), Oracle Cloud ARM64, nginx Ingress, cert-manager (Let's Encrypt), Redis 7, Prometheus + Grafana + Loki, GitHub Actions CI/CD |
 | External APIs | RAWG, Steam Web API, SteamSpy, Epic Games, Riot Games |
 
 ## Project Structure
@@ -186,15 +186,26 @@ Two-stage pipeline processing 868k+ games:
 
 ## Deployment
 
-All three services deploy as Docker containers on EC2 (t3.small) via Docker Compose, with automated CI/CD through GitHub Actions.
+All three services deploy as Docker containers on Oracle Cloud (ARM64, 4 OCPU / 24 GB) via Kubernetes (kubeadm), with automated CI/CD through GitHub Actions.
 
 ```
-docker-compose.yml
-├── frontend     → nginx (ports 80, 443) — serves SPA + reverse proxies to backend
-├── backend      → Node.js 20 Alpine (port 5000)
-├── gamiq        → Python 3.13 slim (port 8000) — FAISS artifacts on persistent volume
-├── redis        → Redis 7 Alpine — rate limiting + recommendation cache
-└── certbot      → Let's Encrypt certificate auto-renewal
+Kubernetes (single-node, Oracle ARM64)
+├── gamesocial namespace
+│   ├── frontend (×2)   → nginx — serves SPA + reverse proxies to backend
+│   ├── backend (×2)    → Node.js 20 Alpine (port 5000)
+│   ├── gamiq (×2)      → Python 3.13 slim (port 8000) — FAISS artifacts on PV
+│   └── redis           → Redis 7 Alpine — rate limiting + recommendation cache
+├── monitoring namespace
+│   ├── prometheus       → Metrics collection + alert rules
+│   ├── grafana          → Dashboard UI (game-social.cc/grafana)
+│   ├── loki + promtail  → Log aggregation
+│   ├── alertmanager     → Email alerts
+│   ├── node-exporter    → Host metrics
+│   └── kube-state-metrics → K8s object metrics
+├── ingress-nginx        → TLS termination via cert-manager (Let's Encrypt)
+└── HPA                  → Auto-scales frontend, backend, gamiq (2–4 replicas)
 ```
 
-The CI/CD pipeline (`.github/workflows/deploy.yml`) builds Docker images, pushes to GHCR, then SSH-deploys to EC2 on every push to `main`.
+The CI/CD pipeline (`.github/workflows/deploy.yml`) cross-compiles ARM64 Docker images via QEMU + Buildx, pushes to GHCR, then SSH-deploys K8s manifests to the instance on every push to `main`.
+
+Live at [game-social.cc](https://game-social.cc).

@@ -114,10 +114,11 @@ The `Dockerfile` uses a multi-stage build:
 2. **Serve stage** — nginx Alpine, serves static files from `dist/`
 
 The `nginx.conf` handles:
-- HTTPS with Let's Encrypt certificates
 - Reverse proxy for `/api/`, `/auth/`, and `/socket.io/` to the backend
 - SPA fallback (`try_files` to `index.html`)
 - Rate limiting (30 req/s for API, 10 req/m for auth)
+
+In production, TLS is terminated at the Kubernetes ingress layer (cert-manager + Let's Encrypt), not at the nginx container level.
 
 ## Part of GameSocial
 
