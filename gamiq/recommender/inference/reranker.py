@@ -12,12 +12,21 @@ from recommender.config import ARTIFACTS_DIR
 RERANKER_ONNX_PATH = str(ARTIFACTS_DIR / "bge-reranker-onnx-int8")
 TOP_N              = 20    # number of final results to return after re-ranking
 
-# ---------------- LOAD MODEL ----------------
+# ---------------- LOAD MODEL (lazy) ----------------
 
-tokenizer = AutoTokenizer.from_pretrained(RERANKER_ONNX_PATH)
-session   = ort.InferenceSession(str(Path(RERANKER_ONNX_PATH) / "model_quantized.onnx"))
-_input_names = [inp.name for inp in session.get_inputs()]
-_lock     = threading.Lock()
+_tokenizer    = None
+_session      = None
+_input_names  = None
+_lock         = threading.Lock()
+
+
+def _ensure_loaded():
+    global _tokenizer, _session, _input_names
+    if _tokenizer is not None:
+        return
+    _tokenizer    = AutoTokenizer.from_pretrained(RERANKER_ONNX_PATH)
+    _session      = ort.InferenceSession(str(Path(RERANKER_ONNX_PATH) / "model_quantized.onnx"))
+    _input_names  = [inp.name for inp in _session.get_inputs()]
 
 # ---------------- RERANK FUNCTION ----------------
 
@@ -38,16 +47,18 @@ def rerank(query_text: str, candidates: list[dict], top_n: int = TOP_N) -> list[
     if not candidates:
         return []
 
+    _ensure_loaded()
+
     # Build (query, candidate) pairs for cross-encoder
     pairs = [(query_text, c["text"]) for c in candidates]
 
     # Score all pairs — lock prevents concurrent predict() calls from corrupting state
     with _lock:
-        encoded = tokenizer(
+        encoded = _tokenizer(
             pairs, padding=True, truncation=True, max_length=512, return_tensors="np"
         )
         inputs = {k: v for k, v in encoded.items() if k in _input_names}
-        logits = session.run(None, inputs)[0]
+        logits = _session.run(None, inputs)[0]
         scores = logits[:, 0] if logits.ndim == 2 else logits
 
     # Attach scores to candidates
