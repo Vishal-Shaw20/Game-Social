@@ -1,0 +1,210 @@
+name: Deploy to Oracle K8s
+
+on:
+  push:
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  REPO_OWNER: ${{ github.repository_owner }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install gamiq dependencies
+        run: pip install -r gamiq/requirements.txt
+
+      - name: Run gamiq tests
+        run: pytest gamiq/tests/ -v
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Lint frontend
+        run: |
+          cd frontend
+          npm ci
+          npm run lint
+
+      - name: Run backend tests
+        run: |
+          cd backend
+          npm ci
+          npm test
+
+  build-and-push:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU (for ARM64 cross-compilation)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push frontend (ARM64)
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          platforms: linux/arm64
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.REPO_OWNER }}/gamesocial-frontend:latest
+
+      - name: Build and push backend (ARM64)
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          platforms: linux/arm64
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.REPO_OWNER }}/gamesocial-backend:latest
+
+      - name: Build and push gamiq (ARM64)
+        uses: docker/build-push-action@v5
+        with:
+          context: ./gamiq
+          platforms: linux/arm64
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.REPO_OWNER }}/gamesocial-gamiq:latest
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Copy K8s manifests to instance
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.OCI_HOST }}
+          username: ${{ secrets.OCI_USER }}
+          key: ${{ secrets.OCI_SSH_KEY }}
+          source: "k8s/*"
+          target: "~/gamesocial/"
+
+      - name: Deploy to Oracle K8s
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.OCI_HOST }}
+          username: ${{ secrets.OCI_USER }}
+          key: ${{ secrets.OCI_SSH_KEY }}
+          script: |
+            # Create namespaces if they don't exist
+            kubectl create namespace gamesocial --dry-run=client -o yaml | kubectl apply -f -
+            kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
+
+            # Recreate backend secrets from GitHub Secrets
+            kubectl delete secret backend-secrets -n gamesocial --ignore-not-found
+            kubectl create secret generic backend-secrets -n gamesocial \
+              --from-literal=MONGO_URI='${{ secrets.BACKEND_MONGO_URI }}' \
+              --from-literal=POSTGRES_URI='${{ secrets.BACKEND_POSTGRES_URI }}' \
+              --from-literal=SESSION_SECRET='${{ secrets.BACKEND_SESSION_SECRET }}' \
+              --from-literal=STEAM_API_KEY='${{ secrets.BACKEND_STEAM_API_KEY }}' \
+              --from-literal=RAWG_API_KEY='${{ secrets.BACKEND_RAWG_API_KEY }}' \
+              --from-literal=EPIC_CLIENT_ID='${{ secrets.BACKEND_EPIC_CLIENT_ID }}' \
+              --from-literal=EPIC_CLIENT_SECRET='${{ secrets.BACKEND_EPIC_CLIENT_SECRET }}' \
+              --from-literal=EPIC_TOKEN_URL='${{ secrets.BACKEND_EPIC_TOKEN_URL }}' \
+              --from-literal=RIOT_API_KEY='${{ secrets.BACKEND_RIOT_API_KEY }}' \
+              --from-literal=GOOGLE_CLIENT_ID='${{ secrets.BACKEND_GOOGLE_CLIENT_ID }}' \
+              --from-literal=GOOGLE_CLIENT_SECRET='${{ secrets.BACKEND_GOOGLE_CLIENT_SECRET }}' \
+              --from-literal=EMAIL_USER='${{ secrets.BACKEND_EMAIL_USER }}' \
+              --from-literal=EMAIL_PASS='${{ secrets.BACKEND_EMAIL_PASS }}' \
+              --from-literal=PIPELINE_API_KEY='${{ secrets.PIPELINE_API_KEY }}' \
+              --from-literal=FRONTEND_URL='${{ secrets.BACKEND_FRONTEND_URL }}' \
+              --from-literal=API_BASE_URL='${{ secrets.BACKEND_FRONTEND_URL }}' \
+              --from-literal=KEEP_SNAPSHOTS='56'
+
+            # Recreate gamiq secrets from GitHub Secrets
+            kubectl delete secret gamiq-secrets -n gamesocial --ignore-not-found
+            kubectl create secret generic gamiq-secrets -n gamesocial \
+              --from-literal=DB_HOST='${{ secrets.GAMIQ_DB_HOST }}' \
+              --from-literal=DB_PORT='${{ secrets.GAMIQ_DB_PORT }}' \
+              --from-literal=DB_NAME='${{ secrets.GAMIQ_DB_NAME }}' \
+              --from-literal=DB_USER='${{ secrets.GAMIQ_DB_USER }}' \
+              --from-literal=DB_PASSWORD='${{ secrets.GAMIQ_DB_PASSWORD }}' \
+              --from-literal=RAWG_API_KEY='${{ secrets.GAMIQ_RAWG_API_KEY }}' \
+              --from-literal=RAWG_API_KEY_1='${{ secrets.GAMIQ_RAWG_API_KEY_1 }}' \
+              --from-literal=RAWG_API_KEY_2='${{ secrets.GAMIQ_RAWG_API_KEY_2 }}' \
+              --from-literal=RAWG_API_KEY_3='${{ secrets.GAMIQ_RAWG_API_KEY_3 }}' \
+              --from-literal=RAWG_API_KEY_4='${{ secrets.GAMIQ_RAWG_API_KEY_4 }}' \
+              --from-literal=RAWG_API_KEY_5='${{ secrets.GAMIQ_RAWG_API_KEY_5 }}' \
+              --from-literal=RAWG_API_KEY_6='${{ secrets.GAMIQ_RAWG_API_KEY_6 }}' \
+              --from-literal=RAWG_API_KEY_7='${{ secrets.GAMIQ_RAWG_API_KEY_7 }}' \
+              --from-literal=RAWG_API_KEY_8='${{ secrets.GAMIQ_RAWG_API_KEY_8 }}' \
+              --from-literal=RAWG_API_KEY_9='${{ secrets.GAMIQ_RAWG_API_KEY_9 }}' \
+              --from-literal=RAWG_API_KEY_10='${{ secrets.GAMIQ_RAWG_API_KEY_10 }}' \
+              --from-literal=RAWG_API_KEY_11='${{ secrets.GAMIQ_RAWG_API_KEY_11 }}' \
+              --from-literal=RAWG_API_KEY_12='${{ secrets.GAMIQ_RAWG_API_KEY_12 }}' \
+              --from-literal=RAWG_API_KEY_13='${{ secrets.GAMIQ_RAWG_API_KEY_13 }}' \
+              --from-literal=RAWG_API_KEY_14='${{ secrets.GAMIQ_RAWG_API_KEY_14 }}' \
+              --from-literal=RAWG_API_KEY_15='${{ secrets.GAMIQ_RAWG_API_KEY_15 }}' \
+              --from-literal=PIPELINE_API_KEY='${{ secrets.PIPELINE_API_KEY }}' \
+              --from-literal=HF_TOKEN='${{ secrets.GAMIQ_HF_TOKEN }}'
+
+            # Recreate monitoring secrets
+            kubectl delete secret monitoring-secrets -n monitoring --ignore-not-found
+            kubectl create secret generic monitoring-secrets -n monitoring \
+              --from-literal=GF_SECURITY_ADMIN_PASSWORD='${{ secrets.GRAFANA_ADMIN_PASSWORD }}'
+
+            # Recreate alertmanager config with real credentials
+            kubectl delete configmap alertmanager-config -n monitoring --ignore-not-found
+            kubectl create configmap alertmanager-config -n monitoring \
+              --from-literal=alertmanager.yml='
+            global:
+              smtp_smarthost: "smtp.gmail.com:587"
+              smtp_from: "${{ secrets.BACKEND_EMAIL_USER }}"
+              smtp_auth_username: "${{ secrets.BACKEND_EMAIL_USER }}"
+              smtp_auth_password: "${{ secrets.BACKEND_EMAIL_PASS }}"
+              smtp_require_tls: true
+            route:
+              group_by: ["alertname", "namespace"]
+              group_wait: 30s
+              group_interval: 5m
+              repeat_interval: 4h
+              receiver: "email"
+            receivers:
+              - name: "email"
+                email_configs:
+                  - to: "${{ secrets.BACKEND_EMAIL_USER }}"
+                    send_resolved: true
+            '
+
+            # Apply all manifests
+            kubectl apply -f ~/gamesocial/k8s/
+            kubectl apply -f ~/gamesocial/k8s/monitoring/
+
+            # Rolling restart to pull new images
+            kubectl rollout restart deployment frontend -n gamesocial
+            kubectl rollout restart deployment backend -n gamesocial
+            kubectl rollout restart deployment gamiq -n gamesocial
+
+            # Wait for rollouts to complete
+            kubectl rollout status deployment frontend -n gamesocial --timeout=120s
+            kubectl rollout status deployment backend -n gamesocial --timeout=120s
+            kubectl rollout status deployment gamiq -n gamesocial --timeout=120s
