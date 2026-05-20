@@ -1,6 +1,6 @@
 // src/hooks/useVoiceChat.js
 import { useEffect, useRef, useState } from "react";
-import { Device } from "mediasoup-client";
+// import { Device } from "mediasoup-client";  // disabled — mediasoup removed from deps
 
 const SPEAKING_THRESHOLD = 0.02;
 console.log("[voice] useVoiceChat loaded");

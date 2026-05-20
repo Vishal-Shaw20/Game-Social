@@ -73,7 +73,10 @@ spec:
             - name: GF_SECURITY_ADMIN_USER
               value: "admin"
             - name: GF_SECURITY_ADMIN_PASSWORD
-              value: "CHANGE_THIS_PASSWORD"
+              valueFrom:
+                secretKeyRef:
+                  name: monitoring-secrets
+                  key: GF_SECURITY_ADMIN_PASSWORD
           ports:
             - containerPort: 3000
           volumeMounts:
