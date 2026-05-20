@@ -205,6 +205,6 @@ jobs:
             kubectl rollout restart deployment gamiq -n gamesocial
 
             # Wait for rollouts to complete
-            kubectl rollout status deployment frontend -n gamesocial --timeout=120s
-            kubectl rollout status deployment backend -n gamesocial --timeout=120s
-            kubectl rollout status deployment gamiq -n gamesocial --timeout=120s
+            kubectl rollout status deployment frontend -n gamesocial --timeout=300s
+            kubectl rollout status deployment backend -n gamesocial --timeout=300s
+            kubectl rollout status deployment gamiq -n gamesocial --timeout=300s
