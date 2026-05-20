@@ -16,10 +16,10 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - yourdomain.com
+        - game-social.cc
       secretName: gamesocial-tls
   rules:
-    - host: yourdomain.com
+    - host: game-social.cc
       http:
         paths:
           - path: /api

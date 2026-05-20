@@ -11,10 +11,10 @@ spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - yourdomain.com
+        - game-social.cc
       secretName: monitoring-tls
   rules:
-    - host: yourdomain.com
+    - host: game-social.cc
       http:
         paths:
           - path: /grafana(/|$)(.*)

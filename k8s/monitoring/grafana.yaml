@@ -67,7 +67,7 @@ spec:
           image: grafana/grafana:latest
           env:
             - name: GF_SERVER_ROOT_URL
-              value: "https://yourdomain.com/grafana/"
+              value: "https://game-social.cc/grafana/"
             - name: GF_SERVER_SERVE_FROM_SUB_PATH
               value: "true"
             - name: GF_SECURITY_ADMIN_USER
