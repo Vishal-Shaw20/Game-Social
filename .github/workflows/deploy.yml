@@ -6,7 +6,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  REPO_OWNER: ${{ github.repository_owner }}
+  REPO_OWNER: vishal-shaw20
 
 jobs:
   test:
