@@ -56,7 +56,7 @@ function UserProfile() {
           setLibrary(libraryData);
           setReviews(reviewsData || []);
         }
-      } catch (err) {
+      } catch {
         if (!cancelled) {
           setError("User not found");
         }

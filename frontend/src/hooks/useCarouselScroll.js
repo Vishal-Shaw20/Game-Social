@@ -8,6 +8,7 @@ export function useCarouselScroll() {
   const animateScroll = useCallback(() => {
     if (!carouselRef.current) return;
     carouselRef.current.scrollLeft += scrollSpeed.current;
+    // eslint-disable-next-line react-hooks/immutability
     rafRef.current = requestAnimationFrame(animateScroll);
   }, []);
 

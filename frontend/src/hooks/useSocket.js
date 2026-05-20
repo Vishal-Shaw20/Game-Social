@@ -57,9 +57,11 @@ export function useSocket(authChecked, isAuthenticated, currentUser) {
     });
 
     return () => {};
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authChecked, isAuthenticated]);
 
   return {
+    // eslint-disable-next-line react-hooks/refs
     socket: socketRef.current,
     connected
   };

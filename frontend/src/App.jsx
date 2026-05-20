@@ -1,5 +1,5 @@
 // src/App.jsx
-import React, { useEffect } from "react";
+import React from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 
 import Layout from "./components/Layout.jsx";

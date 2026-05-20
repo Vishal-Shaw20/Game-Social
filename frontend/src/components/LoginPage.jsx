@@ -7,7 +7,7 @@ function LoginPage() {
   const [isSignup, setIsSignup] = useState(false);
   const [isForgotPassword, setIsForgotPassword] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
-  const [otpVerified, setOtpVerified] = useState(false);
+  const [otpVerified] = useState(false);
   const [loading, setLoading] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
   const [error, setError] = useState("");

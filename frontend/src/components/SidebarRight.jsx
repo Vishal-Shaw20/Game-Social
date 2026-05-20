@@ -1,66 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useParams, useLocation } from "react-router-dom";
-import { useAuth } from "../hooks/useAuth";
-import { useSocket } from "../hooks/useSocket";
+import { useNavigate } from "react-router-dom";
 import styles from "./SidebarRight.module.css";
-// import { useVoiceChat } from "../hooks/useVoiceChat";  // ← Commented out
 
 const POLL_INTERVAL = 8000;
-const SIDEBAR_WIDTH = 220;
-const HANDLE_WIDTH = 32;
 
 export default function SidebarRight() {
   const [notifications, setNotifications] = useState([]);
   const [open, setOpen] = useState(true);
   const navigate = useNavigate();
-  const location = useLocation();
-  const params = useParams();
   const lastIdsRef = useRef([]);
-
-  // Game page detection
-  const isGamePage = location.pathname.startsWith("/game/");
-  const gameId = isGamePage ? params.id : null;
-  const [gameName, setGameName] = useState(null);
-
-  // Auth and Socket
-  const {
-    currentUser,
-    isAuthenticated,
-    authChecked,
-    requireLogin,
-  } = useAuth();
-
-  const { socket, connected } = useSocket(
-    authChecked,
-    isAuthenticated,
-    currentUser
-  );
-
-  // Fetch game name when on game page
-  useEffect(() => {
-    if (!isGamePage || !gameId) {
-      setGameName(null);
-      return;
-    }
-
-    let cancelled = false;
-
-    async function fetchGameName() {
-      try {
-        const res = await fetch(`${import.meta.env.VITE_API_URL}/api/gameLookup/${gameId}`);
-        if (!res.ok) return;
-        const game = await res.json();
-        if (!cancelled && game?.name) {
-          setGameName(game.name);
-        }
-      } catch (err) {
-        console.error("Failed to fetch game name", err);
-      }
-    }
-
-    fetchGameName();
-    return () => { cancelled = true; };
-  }, [isGamePage, gameId]);
 
   async function fetchNotifications() {
     try {
@@ -80,11 +28,11 @@ export default function SidebarRight() {
         lastIdsRef.current = newIds;
         setNotifications(data);
       }
-    } catch {}
+    } catch { /* ignored */ }
   }
 
   useEffect(() => {
-    fetchNotifications();
+    fetchNotifications(); // eslint-disable-line react-hooks/set-state-in-effect
     const id = setInterval(fetchNotifications, POLL_INTERVAL);
     return () => clearInterval(id);
   }, []);
