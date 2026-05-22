@@ -64,7 +64,7 @@ data:
             target_label: __path__
             replacement: /var/log/pods/*$1/*.log
         pipeline_stages:
-          - docker: {}
+          - cri: {}
 ---
 apiVersion: apps/v1
 kind: DaemonSet
@@ -93,9 +93,6 @@ spec:
             - name: varlog
               mountPath: /var/log
               readOnly: true
-            - name: containers
-              mountPath: /var/lib/docker/containers
-              readOnly: true
           resources:
             requests:
               memory: "50Mi"
@@ -110,6 +107,3 @@ spec:
         - name: varlog
           hostPath:
             path: /var/log
-        - name: containers
-          hostPath:
-            path: /var/lib/docker/containers
