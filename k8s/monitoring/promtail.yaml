@@ -48,9 +48,6 @@ data:
         kubernetes_sd_configs:
           - role: pod
         relabel_configs:
-          - source_labels: [__meta_kubernetes_pod_node_name]
-            action: keep
-            regex: ${HOSTNAME}
           - source_labels: [__meta_kubernetes_namespace]
             target_label: namespace
           - source_labels: [__meta_kubernetes_pod_name]
@@ -87,11 +84,6 @@ spec:
           image: grafana/promtail:3.3.2
           args:
             - "-config.file=/etc/promtail/promtail.yaml"
-          env:
-            - name: HOSTNAME
-              valueFrom:
-                fieldRef:
-                  fieldPath: spec.nodeName
           volumeMounts:
             - name: config
               mountPath: /etc/promtail/promtail.yaml
