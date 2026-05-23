@@ -29,6 +29,8 @@ spec:
               value: "production"
             - name: GAMIQ_URL
               value: "http://gamiq.gamesocial.svc.cluster.local:8000"
+            - name: REDIS_URL
+              value: "redis://redis.gamesocial.svc.cluster.local:6379"
           resources:
             requests:
               memory: "150Mi"

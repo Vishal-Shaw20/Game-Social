@@ -60,7 +60,7 @@ def row_to_structured_text(row):
 
 def fetch_embedding_from_db(game_id: int):
     _ensure_loaded()
-    conn = __db_pool.getconn()
+    conn = _db_pool.getconn()
     try:
         cur = conn.cursor()
         cur.execute(
