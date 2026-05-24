@@ -1,3 +1,4 @@
+import os
 import json
 import logging
 import psycopg2
@@ -22,6 +23,7 @@ logger = logging.getLogger(__name__)
 FAISS_INDEX_PATH       = ARTIFACTS_DIR / "faiss_index.ivf"
 CHECKPOINT_PATH        = ARTIFACTS_DIR / "checkpoint.txt"
 UPDATED_CHECKPOINT_PATH = ARTIFACTS_DIR / "updated_checkpoint.txt"
+LOCK_FILE_PATH = ARTIFACTS_DIR / "pipeline.lock"
 
 RAWG_BASE = "https://api.rawg.io/api/games"
 MAX_PAGES = 100
@@ -98,7 +100,7 @@ def load_updated_checkpoint():
             val = f.read().strip()
             if val:
                 return val
-    return (datetime.now(timezone.utc) - timedelta(days=2)).strftime("%Y-%m-%d")
+    return (datetime.now(timezone.utc) - timedelta(days=14)).strftime("%Y-%m-%d")
 
 def save_updated_checkpoint(date_str: str):
     with open(UPDATED_CHECKPOINT_PATH, "w") as f:
@@ -398,260 +400,283 @@ def ensure_game(rawg_id: int) -> dict:
 CHUNK_SIZE = 50
 
 def run_daily_pipeline():
+    lock_acquired = False
 
-    logger.info("Starting daily pipeline")
+    try:
+        fd = os.open(
+            LOCK_FILE_PATH,
+            os.O_CREAT | os.O_EXCL | os.O_WRONLY
+        )
+        os.close(fd)
+        lock_acquired = True
+    except FileExistsError:
+        logger.info("Another pod already running pipeline, skipping")
+        return
 
-    conn = psycopg2.connect(**DB_CONFIG)
+    try:
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        current_checkpoint = load_updated_checkpoint()
 
-    checkpoint_id = load_checkpoint()
-    logger.info("Checkpoint ID: %s", checkpoint_id)
+        if current_checkpoint >= today:
+            logger.info("Pipeline already ran today (%s), skipping", today)
+            return
 
-    new_ids, first_id = fetch_new_game_ids(checkpoint_id)
+        logger.info("Starting daily pipeline")
 
-    if not new_ids:
-        logger.info("No new games")
-    else:
-        logger.info("Found %d new games", len(new_ids))
+        conn = psycopg2.connect(**DB_CONFIG)
 
-        ordered_ids = list(reversed(new_ids))  # oldest first
+        checkpoint_id = load_checkpoint()
+        logger.info("Checkpoint ID: %s", checkpoint_id)
 
-        # -------- Parallel fetch all game details --------
-        games = {}
-        with ThreadPoolExecutor(max_workers=5) as executor:
-            future_to_id = {
-                executor.submit(fetch_game_details, gid): gid
-                for gid in ordered_ids
-            }
-            for future in as_completed(future_to_id):
-                gid = future_to_id[future]
-                result = future.result()
-                if result:
-                    games[gid] = result
-                else:
-                    logger.warning("Skipped game %s (fetch failed)", gid)
+        new_ids, first_id = fetch_new_game_ids(checkpoint_id)
 
-        logger.info("Fetched %d game details", len(games))
+        if not new_ids:
+            logger.info("No new games")
+        else:
+            logger.info("Found %d new games", len(new_ids))
 
-        # -------- Parallel fetch series + insert bidirectional mappings --------
-        series_games = [gid for gid in games if (games[gid].get("game_series_count") or 0) > 0]
+            ordered_ids = list(reversed(new_ids))  # oldest first
 
-        if series_games:
-            series_map = {}
+            # -------- Parallel fetch all game details --------
+            games = {}
             with ThreadPoolExecutor(max_workers=5) as executor:
                 future_to_id = {
-                    executor.submit(fetch_series_for_game, gid): gid
-                    for gid in series_games
+                    executor.submit(fetch_game_details, gid): gid
+                    for gid in ordered_ids
                 }
                 for future in as_completed(future_to_id):
                     gid = future_to_id[future]
-                    try:
-                        series_map[gid] = future.result()
-                    except Exception:
-                        series_map[gid] = []
+                    result = future.result()
+                    if result:
+                        games[gid] = result
+                    else:
+                        logger.warning("Skipped game %s (fetch failed)", gid)
 
-            series_rows = []
-            for gid, members in series_map.items():
-                if members:
-                    for mid in members:
-                        series_rows.append((gid, mid))
-                        series_rows.append((mid, gid))
-                else:
-                    series_rows.append((gid, gid))
+            logger.info("Fetched %d game details", len(games))
 
-            insert_series_batch(conn, series_rows)
-            logger.info("Inserted series mappings for %d games", len(series_games))
+            # -------- Parallel fetch series + insert bidirectional mappings --------
+            series_games = [gid for gid in games if (games[gid].get("game_series_count") or 0) > 0]
 
-        # -------- Process in chunks --------
-        valid_ids = [gid for gid in ordered_ids if gid in games]
+            if series_games:
+                series_map = {}
+                with ThreadPoolExecutor(max_workers=5) as executor:
+                    future_to_id = {
+                        executor.submit(fetch_series_for_game, gid): gid
+                        for gid in series_games
+                    }
+                    for future in as_completed(future_to_id):
+                        gid = future_to_id[future]
+                        try:
+                            series_map[gid] = future.result()
+                        except Exception:
+                            series_map[gid] = []
 
-        all_faiss_ids     = []
-        all_faiss_vectors = []
+                series_rows = []
+                for gid, members in series_map.items():
+                    if members:
+                        for mid in members:
+                            series_rows.append((gid, mid))
+                            series_rows.append((mid, gid))
+                    else:
+                        series_rows.append((gid, gid))
 
-        for i in range(0, len(valid_ids), CHUNK_SIZE):
-            chunk_ids = valid_ids[i:i + CHUNK_SIZE]
+                insert_series_batch(conn, series_rows)
+                logger.info("Inserted series mappings for %d games", len(series_games))
 
-            game_rows      = []
-            texts          = []
-            chunk_game_ids = []
+            # -------- Process in chunks --------
+            valid_ids = [gid for gid in ordered_ids if gid in games]
 
-            for gid in chunk_ids:
-                g = games[gid]
+            all_faiss_ids     = []
+            all_faiss_vectors = []
 
-                game_rows.append((
-                    clean_int(g.get("id")),
-                    clean_text(g.get("slug")),
-                    clean_text(g.get("name")),
-                    clean_text(g.get("name_original")),
-                    clean_text(g.get("description")),
-                    clean_text(g.get("description_raw")),
-                    clean_text(g.get("released")),
-                    clean_text(g.get("background_image")),
-                    clean_text(g.get("background_image_additional")),
-                    clean_int(g.get("suggestions_count")),
-                    extract_platforms(g.get("platforms")),
-                    extract_names(g.get("developers")),
-                    extract_names(g.get("publishers")),
-                    extract_names(g.get("genres")),
-                    extract_names(g.get("tags")),
-                    json.dumps(g.get("esrb_rating")) if g.get("esrb_rating") else None,
-                    clean_text(g.get("website")),
-                    clean_int(g.get("screenshots_count")),
-                    clean_int(g.get("achievements_count")),
-                    clean_int(g.get("game_series_count")),
-                    clean_int(g.get("additions_count")),
-                    clean_int(g.get("parents_count")),
-                    extract_names(g.get("alternative_names")),
-                    g.get("rating") or 0.0,
-                    clean_int(g.get("ratings_count")),
-                    clean_int(g.get("metacritic")),
-                ))
+            for i in range(0, len(valid_ids), CHUNK_SIZE):
+                chunk_ids = valid_ids[i:i + CHUNK_SIZE]
 
-                texts.append(build_structured_text(g))
-                chunk_game_ids.append(gid)
+                game_rows      = []
+                texts          = []
+                chunk_game_ids = []
 
-            # -------- Batch encode --------
-            embeddings = encode_texts(texts)
+                for gid in chunk_ids:
+                    g = games[gid]
 
-            embedding_rows = [
-                (gid, emb.tolist())
-                for gid, emb in zip(chunk_game_ids, embeddings)
-            ]
+                    game_rows.append((
+                        clean_int(g.get("id")),
+                        clean_text(g.get("slug")),
+                        clean_text(g.get("name")),
+                        clean_text(g.get("name_original")),
+                        clean_text(g.get("description")),
+                        clean_text(g.get("description_raw")),
+                        clean_text(g.get("released")),
+                        clean_text(g.get("background_image")),
+                        clean_text(g.get("background_image_additional")),
+                        clean_int(g.get("suggestions_count")),
+                        extract_platforms(g.get("platforms")),
+                        extract_names(g.get("developers")),
+                        extract_names(g.get("publishers")),
+                        extract_names(g.get("genres")),
+                        extract_names(g.get("tags")),
+                        json.dumps(g.get("esrb_rating")) if g.get("esrb_rating") else None,
+                        clean_text(g.get("website")),
+                        clean_int(g.get("screenshots_count")),
+                        clean_int(g.get("achievements_count")),
+                        clean_int(g.get("game_series_count")),
+                        clean_int(g.get("additions_count")),
+                        clean_int(g.get("parents_count")),
+                        extract_names(g.get("alternative_names")),
+                        g.get("rating") or 0.0,
+                        clean_int(g.get("ratings_count")),
+                        clean_int(g.get("metacritic")),
+                    ))
 
-            # -------- Insert chunk --------
-            if game_rows:
-                insert_games_batch(conn, game_rows)
+                    texts.append(build_structured_text(g))
+                    chunk_game_ids.append(gid)
 
-            if embedding_rows:
-                insert_embeddings_batch(conn, embedding_rows)
-
-            # Accumulate for single FAISS update after all chunks
-            if len(chunk_game_ids) > 0:
-                all_faiss_ids.extend(chunk_game_ids)
-                all_faiss_vectors.extend(list(embeddings))
-
-            logger.info("Committed chunk %d: %d games", i // CHUNK_SIZE + 1, len(chunk_ids))
-
-        # -------- Single FAISS update (prevents duplicate IDs on crash) --------
-        if all_faiss_ids:
-            update_faiss(all_faiss_ids, all_faiss_vectors)
-
-        if first_id is not None:
-            save_checkpoint(first_id)
-
-    # ============================================================
-    # -------- PASS 2: Updated games (ordering=-updated) --------
-    # ============================================================
-
-    logger.info("--- Pass 2: Checking for updated games ---")
-
-    since_date = load_updated_checkpoint()
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    logger.info("Fetching games updated since %s", since_date)
-
-    updated_ids = fetch_updated_game_ids(since_date)
-
-    if updated_ids:
-        logger.info("Found %d updated games", len(updated_ids))
-
-        # Fetch old descriptions to detect changes
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT id, description_raw FROM games WHERE id = ANY(%s)",
-                [updated_ids]
-            )
-            old_descriptions = {row[0]: row[1] for row in cur.fetchall()}
-
-        # Parallel fetch details
-        updated_games = {}
-        with ThreadPoolExecutor(max_workers=5) as executor:
-            future_to_id = {
-                executor.submit(fetch_game_details, gid): gid
-                for gid in updated_ids
-            }
-            for future in as_completed(future_to_id):
-                gid = future_to_id[future]
-                result = future.result()
-                if result:
-                    updated_games[gid] = result
-
-        logger.info("Fetched %d updated game details", len(updated_games))
-
-        upd_faiss_ids = []
-        upd_faiss_vectors = []
-
-        for i in range(0, len(updated_ids), CHUNK_SIZE):
-            chunk_ids = [gid for gid in updated_ids[i:i + CHUNK_SIZE] if gid in updated_games]
-
-            game_rows = []
-            re_embed_texts = []
-            re_embed_ids = []
-
-            for gid in chunk_ids:
-                g = updated_games[gid]
-
-                game_rows.append((
-                    clean_int(g.get("id")),
-                    clean_text(g.get("slug")),
-                    clean_text(g.get("name")),
-                    clean_text(g.get("name_original")),
-                    clean_text(g.get("description")),
-                    clean_text(g.get("description_raw")),
-                    clean_text(g.get("released")),
-                    clean_text(g.get("background_image")),
-                    clean_text(g.get("background_image_additional")),
-                    clean_int(g.get("suggestions_count")),
-                    extract_platforms(g.get("platforms")),
-                    extract_names(g.get("developers")),
-                    extract_names(g.get("publishers")),
-                    extract_names(g.get("genres")),
-                    extract_names(g.get("tags")),
-                    json.dumps(g.get("esrb_rating")) if g.get("esrb_rating") else None,
-                    clean_text(g.get("website")),
-                    clean_int(g.get("screenshots_count")),
-                    clean_int(g.get("achievements_count")),
-                    clean_int(g.get("game_series_count")),
-                    clean_int(g.get("additions_count")),
-                    clean_int(g.get("parents_count")),
-                    extract_names(g.get("alternative_names")),
-                    g.get("rating") or 0.0,
-                    clean_int(g.get("ratings_count")),
-                    clean_int(g.get("metacritic")),
-                ))
-
-                old_desc = old_descriptions.get(gid)
-                new_desc = clean_text(g.get("description_raw"))
-                if old_desc != new_desc:
-                    re_embed_texts.append(build_structured_text(g))
-                    re_embed_ids.append(gid)
-
-            if game_rows:
-                upsert_games_batch(conn, game_rows)
-
-            if re_embed_texts:
-                embeddings = encode_texts(re_embed_texts)
+                # -------- Batch encode --------
+                embeddings = encode_texts(texts)
 
                 embedding_rows = [
                     (gid, emb.tolist())
-                    for gid, emb in zip(re_embed_ids, embeddings)
+                    for gid, emb in zip(chunk_game_ids, embeddings)
                 ]
-                insert_embeddings_batch(conn, embedding_rows)
 
-                upd_faiss_ids.extend(re_embed_ids)
-                upd_faiss_vectors.extend(list(embeddings))
+                # -------- Insert chunk --------
+                if game_rows:
+                    insert_games_batch(conn, game_rows)
 
-            logger.info("Updated chunk %d: %d games, %d re-embedded", i // CHUNK_SIZE + 1, len(chunk_ids), len(re_embed_ids))
+                if embedding_rows:
+                    insert_embeddings_batch(conn, embedding_rows)
 
-        if upd_faiss_ids:
-            update_faiss(upd_faiss_ids, upd_faiss_vectors)
+                # Accumulate for single FAISS update after all chunks
+                if len(chunk_game_ids) > 0:
+                    all_faiss_ids.extend(chunk_game_ids)
+                    all_faiss_vectors.extend(list(embeddings))
 
-    else:
-        logger.info("No updated games found")
+                logger.info("Committed chunk %d: %d games", i // CHUNK_SIZE + 1, len(chunk_ids))
 
-    save_updated_checkpoint(today)
+            # -------- Single FAISS update (prevents duplicate IDs on crash) --------
+            if all_faiss_ids:
+                update_faiss(all_faiss_ids, all_faiss_vectors)
 
-    conn.close()
-    clear_recommendation_cache()
-    logger.info("Daily pipeline completed")
+            if first_id is not None:
+                save_checkpoint(first_id)
+
+        # ============================================================
+        # -------- PASS 2: Updated games (ordering=-updated) --------
+        # ============================================================
+
+        logger.info("--- Pass 2: Checking for updated games ---")
+
+        since_date = load_updated_checkpoint()
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        logger.info("Fetching games updated since %s", since_date)
+
+        updated_ids = fetch_updated_game_ids(since_date)
+
+        if updated_ids:
+            logger.info("Found %d updated games", len(updated_ids))
+
+            # Fetch old descriptions to detect changes
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT id, description_raw FROM games WHERE id = ANY(%s)",
+                    [updated_ids]
+                )
+                old_descriptions = {row[0]: row[1] for row in cur.fetchall()}
+
+            # Parallel fetch details
+            updated_games = {}
+            with ThreadPoolExecutor(max_workers=5) as executor:
+                future_to_id = {
+                    executor.submit(fetch_game_details, gid): gid
+                    for gid in updated_ids
+                }
+                for future in as_completed(future_to_id):
+                    gid = future_to_id[future]
+                    result = future.result()
+                    if result:
+                        updated_games[gid] = result
+
+            logger.info("Fetched %d updated game details", len(updated_games))
+
+            upd_faiss_ids = []
+            upd_faiss_vectors = []
+
+            for i in range(0, len(updated_ids), CHUNK_SIZE):
+                chunk_ids = [gid for gid in updated_ids[i:i + CHUNK_SIZE] if gid in updated_games]
+
+                game_rows = []
+                re_embed_texts = []
+                re_embed_ids = []
+
+                for gid in chunk_ids:
+                    g = updated_games[gid]
+
+                    game_rows.append((
+                        clean_int(g.get("id")),
+                        clean_text(g.get("slug")),
+                        clean_text(g.get("name")),
+                        clean_text(g.get("name_original")),
+                        clean_text(g.get("description")),
+                        clean_text(g.get("description_raw")),
+                        clean_text(g.get("released")),
+                        clean_text(g.get("background_image")),
+                        clean_text(g.get("background_image_additional")),
+                        clean_int(g.get("suggestions_count")),
+                        extract_platforms(g.get("platforms")),
+                        extract_names(g.get("developers")),
+                        extract_names(g.get("publishers")),
+                        extract_names(g.get("genres")),
+                        extract_names(g.get("tags")),
+                        json.dumps(g.get("esrb_rating")) if g.get("esrb_rating") else None,
+                        clean_text(g.get("website")),
+                        clean_int(g.get("screenshots_count")),
+                        clean_int(g.get("achievements_count")),
+                        clean_int(g.get("game_series_count")),
+                        clean_int(g.get("additions_count")),
+                        clean_int(g.get("parents_count")),
+                        extract_names(g.get("alternative_names")),
+                        g.get("rating") or 0.0,
+                        clean_int(g.get("ratings_count")),
+                        clean_int(g.get("metacritic")),
+                    ))
+
+                    old_desc = old_descriptions.get(gid)
+                    new_desc = clean_text(g.get("description_raw"))
+                    if old_desc != new_desc:
+                        re_embed_texts.append(build_structured_text(g))
+                        re_embed_ids.append(gid)
+
+                if game_rows:
+                    upsert_games_batch(conn, game_rows)
+
+                if re_embed_texts:
+                    embeddings = encode_texts(re_embed_texts)
+
+                    embedding_rows = [
+                        (gid, emb.tolist())
+                        for gid, emb in zip(re_embed_ids, embeddings)
+                    ]
+                    insert_embeddings_batch(conn, embedding_rows)
+
+                    upd_faiss_ids.extend(re_embed_ids)
+                    upd_faiss_vectors.extend(list(embeddings))
+
+                logger.info("Updated chunk %d: %d games, %d re-embedded", i // CHUNK_SIZE + 1, len(chunk_ids), len(re_embed_ids))
+
+            if upd_faiss_ids:
+                update_faiss(upd_faiss_ids, upd_faiss_vectors)
+
+        else:
+            logger.info("No updated games found")
+
+        save_updated_checkpoint(today)
+
+        conn.close()
+        clear_recommendation_cache()
+        logger.info("Daily pipeline completed")
+    finally:
+        if lock_acquired and LOCK_FILE_PATH.exists():
+            LOCK_FILE_PATH.unlink()
 
 # ============================================================
 
