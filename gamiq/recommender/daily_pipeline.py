@@ -1,4 +1,5 @@
 import os
+import time
 import json
 import logging
 import psycopg2
@@ -86,9 +87,13 @@ def load_checkpoint():
     return max_id
 
 def save_checkpoint(game_id: int):
-    with open(CHECKPOINT_PATH, "w") as f:
-        f.write(str(game_id))
-    logger.info("Checkpoint saved: %s", game_id)
+    try:
+        with open(CHECKPOINT_PATH, "w") as f:
+            f.write(str(game_id))
+        logger.info("Checkpoint saved: %s", game_id)
+    except Exception:
+        logger.exception("Failed to save checkpoint")
+        raise
 
 # ============================================================
 # -------------------- UPDATED CHECKPOINT --------------------
@@ -103,9 +108,13 @@ def load_updated_checkpoint():
     return (datetime.now(timezone.utc) - timedelta(days=14)).strftime("%Y-%m-%d")
 
 def save_updated_checkpoint(date_str: str):
-    with open(UPDATED_CHECKPOINT_PATH, "w") as f:
-        f.write(date_str)
-    logger.info("Updated checkpoint saved: %s", date_str)
+    try:
+        with open(UPDATED_CHECKPOINT_PATH, "w") as f:
+            f.write(date_str)
+        logger.info("Updated checkpoint saved: %s", date_str)
+    except Exception:
+        logger.exception("Failed to save updated checkpoint")
+        raise
 
 # ============================================================
 # -------------------- DB INSERTS ----------------------------
@@ -315,6 +324,7 @@ def update_faiss(new_ids: list, new_vectors: list):
 
     index = faiss.read_index(str(FAISS_INDEX_PATH))
 
+    logger.info("Updating FAISS index...")
     vectors = np.array(new_vectors, dtype="float32")
     faiss.normalize_L2(vectors)
     ids = np.array(new_ids, dtype="int64")
@@ -394,6 +404,18 @@ def ensure_game(rawg_id: int) -> dict:
         conn.close()
 
 # ============================================================
+# --------------------- REMOVE LOCK FILE ---------------------
+# ============================================================
+
+def remove_lock_file(log_message: str) -> bool:
+    try:
+        LOCK_FILE_PATH.unlink()
+        return True
+    except Exception:
+        logger.exception(log_message)
+        return False
+
+# ============================================================
 # -------------------- MAIN DAILY PIPELINE -------------------
 # ============================================================
 
@@ -401,8 +423,18 @@ CHUNK_SIZE = 50
 
 def run_daily_pipeline():
     lock_acquired = False
+    conn = None
 
     try:
+        if LOCK_FILE_PATH.exists():
+            age = time.time() - LOCK_FILE_PATH.stat().st_mtime
+
+            # stale lock > 6 hours
+            if age > 21600:
+                logger.warning("Removing stale pipeline lock")
+                if not remove_lock_file("Failed removing stale lock"):
+                    return
+
         fd = os.open(
             LOCK_FILE_PATH,
             os.O_CREAT | os.O_EXCL | os.O_WRONLY
@@ -554,8 +586,11 @@ def run_daily_pipeline():
                 logger.info("Committed chunk %d: %d games", i // CHUNK_SIZE + 1, len(chunk_ids))
 
             # -------- Single FAISS update (prevents duplicate IDs on crash) --------
-            if all_faiss_ids:
-                update_faiss(all_faiss_ids, all_faiss_vectors)
+            try:
+                if all_faiss_ids:
+                    update_faiss(all_faiss_ids, all_faiss_vectors)
+            except Exception:
+                logger.exception("Pass 1 FAISS update failed")
 
             if first_id is not None:
                 save_checkpoint(first_id)
@@ -663,21 +698,31 @@ def run_daily_pipeline():
 
                 logger.info("Updated chunk %d: %d games, %d re-embedded", i // CHUNK_SIZE + 1, len(chunk_ids), len(re_embed_ids))
 
-            if upd_faiss_ids:
-                update_faiss(upd_faiss_ids, upd_faiss_vectors)
+            try:
+                if upd_faiss_ids:
+                    update_faiss(upd_faiss_ids, upd_faiss_vectors)
+            except Exception:
+                logger.exception("Pass 2 FAISS update failed")
 
         else:
             logger.info("No updated games found")
 
         save_updated_checkpoint(today)
 
-        conn.close()
-        clear_recommendation_cache()
-        logger.info("Daily pipeline completed")
-    finally:
-        if lock_acquired and LOCK_FILE_PATH.exists():
-            LOCK_FILE_PATH.unlink()
+        try:
+            clear_recommendation_cache()
+        except Exception:
+            logger.exception("Cache clear failed")
 
+        logger.info("Daily pipeline completed")
+    except Exception:
+        logger.exception("Daily pipeline crashed")
+        raise
+    finally:
+        if conn:
+            conn.close()
+        if lock_acquired and LOCK_FILE_PATH.exists():
+            remove_lock_file("Failed to remove pipeline lock")
 # ============================================================
 
 if __name__ == "__main__":
