@@ -332,7 +332,7 @@ router.post("/email/code", async (req, res) => {
     try {
       await sendOtpEmail(email, otp);
     } catch {
-      await deleteOtp(emailKey(req.user._id)).catch(() => {});
+      try { await deleteOtp(emailKey(req.user._id)); } catch { /* best effort */ }
       return res.status(502).json({ message: "We couldn't send the email just now. Check the address and try again." });
     }
     res.json({ ok: true, email });

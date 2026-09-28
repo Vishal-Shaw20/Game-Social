@@ -137,7 +137,7 @@ jobs:
               --from-literal=EMAIL_PASS='${{ secrets.BACKEND_EMAIL_PASS }}' \
               --from-literal=PIPELINE_API_KEY='${{ secrets.PIPELINE_API_KEY }}' \
               --from-literal=FRONTEND_URL='${{ secrets.BACKEND_FRONTEND_URL }}' \
-              --from-literal=API_BASE_URL='${{ secrets.BACKEND_FRONTEND_URL }}' \
+              --from-literal=API_BASE_URL='${{ secrets.BACKEND_API_BASE_URL }}' \
               --from-literal=KEEP_SNAPSHOTS='56'
 
             # Recreate gamiq secrets from GitHub Secrets

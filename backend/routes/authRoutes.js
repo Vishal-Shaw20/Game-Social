@@ -24,7 +24,7 @@ const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const byEmail = (email) => ({ email: new RegExp(`^${escapeRe(email)}$`, "i") });
 const signupKey = (email) => `signup:${email}`;
 const resetKey = (email) => `reset:${email}`;
-const hasPassword = (user) => user.linkedAccounts.some((a) => a.provider === "native");
+const hasPassword = (user) => (user.linkedAccounts ?? []).some((a) => a.provider === "native");
 
 const EMAIL_EXISTS = {
   code: "EMAIL_EXISTS",
@@ -144,7 +144,7 @@ router.post("/send-otp", emailLimiter, async (req, res) => {
     try {
       await sendOtpEmail(email, otp);
     } catch {
-      await deleteOtp(signupKey(email)).catch(() => {});
+      try { await deleteOtp(signupKey(email)); } catch { /* best effort */ }
       return res.status(502).json(EMAIL_FAILED);
     }
     res.json({ message: `We sent a code to ${email}.` });
@@ -223,7 +223,7 @@ router.post("/login", strictAuthLimiter, async (req, res) => {
     const user = await User.findOne(
       identifier.includes("@") ? byEmail(normEmail(identifier)) : { usernameLower: identifier.toLowerCase() }
     );
-    const native = user?.linkedAccounts.find((a) => a.provider === "native");
+    const native = user?.linkedAccounts?.find((a) => a.provider === "native");
     const ok = native ? await bcrypt.compare(password, native.providerId) : false;
     if (!ok) return res.status(400).json(WRONG);
 
@@ -276,7 +276,7 @@ router.post("/forgot-password", emailLimiter, async (req, res) => {
     try {
       await sendOtpEmail(email, otp);
     } catch {
-      await deleteOtp(resetKey(email)).catch(() => {});
+      try { await deleteOtp(resetKey(email)); } catch { /* best effort */ }
       return res.status(502).json(EMAIL_FAILED);
     }
     res.json(SENT);
@@ -300,7 +300,7 @@ router.post("/reset-password", strictAuthLimiter, async (req, res) => {
 
     const user = await User.findOne(byEmail(email));
     if (!user) return res.status(400).json(CODE_EXPIRED);
-    const native = user.linkedAccounts.find((a) => a.provider === "native");
+    const native = user.linkedAccounts?.find((a) => a.provider === "native");
     if (!native) return res.status(400).json(NO_PASSWORD);
 
     native.providerId = await bcrypt.hash(newPassword, 10);
