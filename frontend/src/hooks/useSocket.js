@@ -1,68 +1,31 @@
 // src/hooks/useSocket.js
-import { useEffect, useRef, useState } from "react";
-import { io } from "socket.io-client";
+import { useEffect, useState } from "react";
+import { getSocket, ensureConnected } from "../realtime/socket";
 
-export function useSocket(authChecked, isAuthenticated, currentUser) {
-  const socketRef = useRef(null);
-  const [connected, setConnected] = useState(false);
+/**
+ * The shared socket (realtime/socket.js) for signed-in users, plus whether
+ * it's connected. Never disconnects on unmount: other parts of the app
+ * (notifications, Social) use the same connection.
+ */
+export function useSocket(authChecked, isAuthenticated) {
+  const socket = getSocket();
+  const [connected, setConnected] = useState(socket.connected);
 
   useEffect(() => {
-    if (!authChecked || !isAuthenticated) {
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-        socketRef.current = null;
-        setConnected(false);
-      }
-      return;
-    }
-
-    if (socketRef.current) {
-      return;
-    }
-
-    const url =
-      import.meta.env.VITE_SOCKET_URL?.trim() || window.location.origin;
-
-    const socket = io(url, {
-      transports: ["websocket"],
-      withCredentials: true,
-      auth: {
-        user: {
-          id: currentUser?.id || currentUser?._id || null,
-          name:
-            currentUser?.name ||
-            currentUser?.displayName ||
-            currentUser?.username ||
-            null
-        }
-      }
-    });
-
-    socketRef.current = socket;
-
-    socket.on("connect", () => {
-      setConnected(true);
-    });
-
-    socket.on("disconnect", () => {
-      setConnected(false);
-    });
-
-    socket.on("connect_error", (err) => {
-      if (err.message === "Authentication required") {
-        socket.disconnect();
-        socketRef.current = null;
-        setConnected(false);
-      }
-    });
-
-    return () => {};
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (!authChecked || !isAuthenticated) return;
+    const s = ensureConnected();
+    const on = () => setConnected(true);
+    const off = () => setConnected(false);
+    s.on("connect", on);
+    s.on("disconnect", off);
+    return () => {
+      s.off("connect", on);
+      s.off("disconnect", off);
+    };
   }, [authChecked, isAuthenticated]);
 
   return {
-    // eslint-disable-next-line react-hooks/refs
-    socket: socketRef.current,
-    connected
+    socket: authChecked && isAuthenticated ? socket : null,
+    connected: authChecked && isAuthenticated && connected
   };
 }

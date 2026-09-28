@@ -223,3 +223,258 @@
   border: 1px solid rgba(248, 81, 73, 0.3);
   border-radius: var(--radius-lg);
 }
+
+/* ───────── Friend requests & buttons ───────── */
+
+.titleSpaced {
+  margin-top: var(--space-5);
+}
+
+.requestRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border-secondary);
+}
+
+.requestRow:last-child {
+  border-bottom: none;
+}
+
+.requestUser {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.requestActions {
+  display: flex;
+  gap: var(--space-2);
+  flex: none;
+}
+
+/* Same squared tag language as the rest of the app. */
+.primaryBtn,
+.ghostBtn {
+  flex: none;
+  padding: 6px 12px;
+  border-radius: var(--radius-md, 8px);
+  border: none;
+  font: inherit;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.2s ease, box-shadow 0.2s ease, color 0.2s ease;
+}
+
+.primaryBtn {
+  background: #f8fafc;
+  color: #05070c;
+}
+
+.primaryBtn:hover:not(:disabled) {
+  background: #fff;
+}
+
+.ghostBtn {
+  background: rgba(5, 7, 12, 0.55);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.14) inset;
+  color: var(--color-text-secondary);
+}
+
+.ghostBtn:hover:not(:disabled) {
+  color: var(--color-text-primary);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.28) inset;
+}
+
+.primaryBtn:disabled,
+.ghostBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.relationTag {
+  flex: none;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-tertiary);
+}
+
+/* Unfriend "×" inside a friend chip; quiet until the chip is hovered. */
+.removeBtn {
+  margin-left: 2px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--color-text-tertiary);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.socialFriendItem:hover .removeBtn,
+.removeBtn:focus-visible {
+  opacity: 1;
+}
+
+.removeBtn:hover {
+  background: rgba(239, 68, 68, 0.18);
+  color: #fca5a5;
+}
+
+/* ───────── Page shell: Squad | Feed ───────── */
+
+/* Same side gutter as the homepage (75px, clear of the sidebar rail). */
+.socialPage {
+  --page-pad: 75px;
+  padding: 40px var(--page-pad) 80px;
+}
+
+/* Full-width two-way switch. The thumb is one element that slides under
+   whichever tab is active (--tab-index), so switching reads as a toggle. */
+.tabSwitch {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--tab-count), 1fr);
+  padding: 5px;
+  border-radius: 14px;
+  background: rgba(5, 7, 12, 0.55);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+}
+
+.tabThumb {
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  left: 5px;
+  width: calc((100% - 10px) / var(--tab-count));
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.14) inset;
+  transform: translateX(calc(100% * var(--tab-index)));
+  transition: transform 0.3s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+.tabBtn {
+  position: relative;
+  z-index: 1;
+  padding: 12px 16px;
+  border: none;
+  border-radius: 10px;
+  background: none;
+  color: var(--color-text-tertiary);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.tabBtn:hover {
+  color: var(--color-text-secondary);
+}
+
+.tabBtnActive,
+.tabBtnActive:hover {
+  color: #fff;
+}
+
+.tabBtn:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
+/* Both tabs sit side by side; the track slides to the active one. */
+.tabViewport {
+  overflow: hidden;
+  margin-top: 8px;
+  touch-action: pan-y;
+}
+
+.tabTrack {
+  display: flex;
+  align-items: flex-start;
+  transform: translateX(calc(-100% * var(--tab-index)));
+  transition: transform 0.35s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+/* The hidden tab collapses once the slide has finished (the 0s transition
+   with a 0.35s delay), so the page is only as tall as the tab on show. The
+   shown one expands immediately. */
+.tabPane {
+  flex: 0 0 100%;
+  min-width: 0;
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0s linear 0.35s;
+}
+
+.tabPaneActive {
+  max-height: 100000px;
+  overflow: visible;
+  transition: none;
+}
+
+/* ───────── Feed placeholder ───────── */
+
+.construction {
+  max-width: 520px;
+  margin: 72px auto 0;
+  text-align: center;
+}
+
+.constructionTitle {
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  color: var(--color-text-primary);
+}
+
+.constructionText {
+  margin: 10px 0 0;
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  color: var(--color-text-tertiary);
+}
+
+@media (max-width: 768px) {
+  .socialPage {
+    --page-pad: 16px;
+    padding-left: 72px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tabThumb,
+  .tabTrack {
+    transition: none;
+  }
+}
+
+/* Feed tab: the activity list, centred like the old Social page. */
+.feed {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 20px;
+  border-radius: 14px;
+  background: rgba(5, 7, 12, 0.55);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+}

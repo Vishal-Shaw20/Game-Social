@@ -45,5 +45,9 @@ const ReviewSchema = new mongoose.Schema(
 );
 
 ReviewSchema.index({ rawgId: 1, userId: 1 }, { unique: true });
+// A game's review list, newest first.
+ReviewSchema.index({ rawgId: 1, createdAt: -1 });
+// A profile's reviews, newest first.
+ReviewSchema.index({ userId: 1, createdAt: -1 });
 
 export default mongoose.model("GameReview", ReviewSchema);

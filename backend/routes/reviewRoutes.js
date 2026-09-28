@@ -1,9 +1,13 @@
 import express from "express";
+import mongoose from "mongoose";
 import GameReview from "../models/GameReview.js";
+import Notification from "../models/Notification.js";
+import Activity from "../models/Activity.js";
+import ReviewDraft from "../models/ReviewDraft.js";
 import { rawgToSteamAppId } from "../utils/rawgToSteam.js";
 import { getPlaytime } from "../utils/getPlaytime.js";
 import ReviewComment from "../models/ReviewComment.js";
-import { PRO_TAGS, CON_TAGS } from "../shared/reviewTags.js";
+import { normalizeTags } from "../shared/reviewTags.js";
 import User from "../models/User.js";
 import { createNotification } from "../utils/createNotification.js";
 import { extractMentions } from "../utils/parseMentions.js";
@@ -11,19 +15,52 @@ import { deleteNotification } from "../utils/deleteNotification.js";
 import { createActivity } from "../utils/createActivity.js";
 import { deleteActivity } from "../utils/deleteActivity.js";
 import logger from "../config/logger.js";
+import { getPG } from "../config/db.js";
 import { writeLimiter } from "../middleware/rateLimiter.js";
 import { requireAuth } from "../middleware/requireAuth.js";
 
-const normalizeTags = (arr, allowed) =>
-  Array.isArray(arr)
-    ? arr.filter(t => allowed.includes(t))
-    : [];
 
 const router = express.Router();
+
+// What a review or comment shows about its author. Never the whole
+// linkedAccounts entries: those hold each provider's access/refresh tokens.
+const REVIEW_AUTHOR = "displayName username profilePicture linkedAccounts.provider linkedAccounts.avatar";
+
+/*
+ * Deletes comments together with every reply under them, at any depth, plus
+ * the notifications and activity pointing at any of them. `filter` picks the
+ * starting comments (one comment, or a whole review's thread).
+ *
+ * Replies only know their parent, so the tree is walked level by level. It
+ * repeats until a pass finds nothing new, which also catches a reply posted
+ * to a comment while it was being deleted.
+ */
+async function deleteCommentTree(filter) {
+  let frontier = (await ReviewComment.find(filter, { _id: 1 }).lean()).map((c) => c._id);
+  const all = [];
+  const seen = new Set();
+  while (frontier.length) {
+    const fresh = frontier.filter((id) => !seen.has(String(id)));
+    if (!fresh.length) break;
+    fresh.forEach((id) => seen.add(String(id)));
+    all.push(...fresh);
+    await ReviewComment.deleteMany({ _id: { $in: fresh } });
+    frontier = (await ReviewComment.find({ parentId: { $in: fresh } }, { _id: 1 }).lean()).map((c) => c._id);
+  }
+  if (all.length) {
+    // Mentions and likes leave one notification each: all of them go.
+    await Notification.deleteMany({ entityId: { $in: all } });
+    await Activity.deleteMany({ entityId: { $in: all } }).catch((err) =>
+      logger.error({ err }, "delete comment activity failed")
+    );
+  }
+  return all.length;
+}
+
 router.get("/user/:username", async (req, res) => {
   try {
     const user = await User.findOne(
-      { username: req.params.username },
+      { usernameLower: req.params.username.toLowerCase() },
       { _id: 1, displayName: 1 }
     );
 
@@ -38,7 +75,17 @@ router.get("/user/:username", async (req, res) => {
       .sort({ createdAt: -1 })
       .lean();
 
-    res.json(reviews);
+    // each review's game (name and art), for the public profile's list
+    const ids = [...new Set(reviews.map((r) => Number(r.rawgId)).filter(Number.isFinite))];
+    const games = new Map();
+    const pg = getPG();
+    if (pg && ids.length) {
+      const { rows } = await pg
+        .query("SELECT id, name, background_image FROM games WHERE id = ANY($1)", [ids])
+        .catch(() => ({ rows: [] }));
+      for (const g of rows) games.set(String(g.id), { name: g.name, cover: g.background_image || null });
+    }
+    res.json(reviews.map((r) => ({ ...r, game: games.get(String(r.rawgId)) ?? null })));
   } catch (e) {
     logger.error({ err: e }, "get user reviews failed");
     res.status(500).json([]);
@@ -59,10 +106,18 @@ router.get("/game/:rawgId", async (req, res) => {
       rawgId: req.params.rawgId,
       visibility: "public"
     })
-      .populate("userId", "displayName linkedAccounts")
+      .populate({ path: "userId", model: User, select: REVIEW_AUTHOR }) // GameReview.userId has no ref
       .sort({ createdAt: -1 })
       .lean();
 
+    // How many comments each review has (the game page shows the count on a
+    // collapsed thread).
+    const counts = await ReviewComment.aggregate([
+      { $match: { reviewId: { $in: reviews.map((r) => r._id) } } },
+      { $group: { _id: "$reviewId", n: { $sum: 1 } } },
+    ]);
+    const byId = new Map(counts.map((c) => [String(c._id), c.n]));
+    for (const r of reviews) r.commentCount = byId.get(String(r._id)) ?? 0;
 
     res.json(reviews);
   } catch (e) {
@@ -92,12 +147,13 @@ router.put("/:id", requireAuth, writeLimiter, async (req, res) => {
     review.verdict = verdict;
     review.title = title;
     review.body = body;
-    review.pros = normalizeTags(pros, PRO_TAGS);
-    review.cons = normalizeTags(cons, CON_TAGS);
+    review.pros = normalizeTags(pros, "pros");
+    review.cons = normalizeTags(cons, "cons");
     review.completed = completed;
     review.edited = true;
 
     await review.save();
+    await ReviewDraft.deleteOne({ userId: req.user._id, rawgId: review.rawgId }).catch(() => {});
 
     res.json(review);
   } catch (e) {
@@ -115,11 +171,11 @@ router.post("/:id/unlike", requireAuth, writeLimiter, async (req, res) => {
 
   try {
     // Remove like
-    await GameReview.findByIdAndUpdate(req.params.id, {
-      $pull: { likes: req.user._id }
-    });
-
-    const review = await GameReview.findById(req.params.id);
+    const review = await GameReview.findByIdAndUpdate(
+      req.params.id,
+      { $pull: { likes: req.user._id } },
+      { new: true, lean: true }
+    );
 
     if (review && String(review.userId) !== String(req.user._id)) {
 
@@ -131,11 +187,12 @@ router.post("/:id/unlike", requireAuth, writeLimiter, async (req, res) => {
         entityId: review._id
       });
 
-      // 📣 DELETE activity
+      // The matching entry from the like above: the actor owns it, and its
+      // type is "like". This used to pass the review's owner and a type that
+      // is never written, so the entry stayed in friends' feeds forever.
       await deleteActivity({
-        userId: review.userId,
-        actorId: req.user._id,
-        type: "activity_review_like",
+        userId: req.user._id,
+        type: "like",
         entityId: review._id
       });
     }
@@ -155,7 +212,7 @@ router.get("/:reviewId/comments", async (req, res) => {
     const comments = await ReviewComment.find({
       reviewId: req.params.reviewId
     })
-      .populate("userId", "displayName linkedAccounts")
+      .populate("userId", REVIEW_AUTHOR)
       .sort({ createdAt: 1 })
       .lean();
 
@@ -177,6 +234,18 @@ router.post("/:reviewId/comments", requireAuth, writeLimiter, async (req, res) =
       return res.status(400).json({ error: "empty_body" });
     }
 
+    // Only on a review that exists, and a reply only to a comment of that
+    // same review: otherwise the comment would be an orphan from the start.
+    if (!mongoose.isValidObjectId(req.params.reviewId) || !(await GameReview.exists({ _id: req.params.reviewId }))) {
+      return res.status(404).json({ error: "review_not_found" });
+    }
+    if (parentId) {
+      const parentOk =
+        mongoose.isValidObjectId(parentId) &&
+        (await ReviewComment.exists({ _id: parentId, reviewId: req.params.reviewId }));
+      if (!parentOk) return res.status(404).json({ error: "parent_not_found" });
+    }
+
 
     const comment = await ReviewComment.create({
       reviewId: req.params.reviewId,
@@ -186,7 +255,7 @@ router.post("/:reviewId/comments", requireAuth, writeLimiter, async (req, res) =
     });
 
 
-    await comment.populate("userId", "displayName linkedAccounts");
+    await comment.populate("userId", REVIEW_AUTHOR);
 // 🔔 Mentions in comment
 const mentions = extractMentions(body);
 
@@ -206,16 +275,17 @@ if (mentions.length) {
       text: `${req.user.displayName} mentioned you in a comment`,
       url: `/reviews/${req.params.reviewId}`
     });
-    await createActivity({
-  userId: req.user._id,
-  type: "comment",
-  entityId: comment._id,
-  text: `${req.user.displayName} commented on a review`,
-  url: `/reviews/${req.params.reviewId}`
-});
-
   }
 }
+
+    // One activity entry per comment, mentions or not.
+    await createActivity({
+      userId: req.user._id,
+      type: "comment",
+      entityId: comment._id,
+      text: "commented on a review",
+      url: `/reviews/${req.params.reviewId}`
+    });
 
   
     res.json(comment);
@@ -226,21 +296,29 @@ if (mentions.length) {
 });
 
 router.post("/comments/:id/like", requireAuth, writeLimiter, async (req, res) => {
-  const comment = await ReviewComment.findById(req.params.id);
+  // Toggle inside MongoDB with an update pipeline: one round trip, and two
+  // taps at once can't lose a like the way read-modify-write could.
+  const before = await ReviewComment.findById(req.params.id).lean();
+  if (!before) return res.status(404).json({});
+
+  const liked = before.likes.some(id => String(id) === String(req.user._id));
+
+  const comment = await ReviewComment.findByIdAndUpdate(
+    req.params.id,
+    [{
+      $set: {
+        likes: {
+          $cond: [
+            { $in: [req.user._id, "$likes"] },
+            { $setDifference: ["$likes", [req.user._id]] },
+            { $concatArrays: ["$likes", [req.user._id]] }
+          ]
+        }
+      }
+    }],
+    { new: true }
+  );
   if (!comment) return res.status(404).json({});
-
-  const userId = String(req.user._id);
-  const liked = comment.likes.some(id => String(id) === userId);
-
-  if (liked) {
-    // UNLIKE
-    comment.likes = comment.likes.filter(id => String(id) !== userId);
-  } else {
-    // LIKE
-    comment.likes.push(req.user._id);
-  }
-
-  await comment.save();
 
   // 🔔 DELETE notification on UNLIKE (ADD HERE)
   if (
@@ -293,7 +371,7 @@ router.put("/comments/:id", requireAuth, writeLimiter, async (req, res) => {
     comment.edited = true;
 
     await comment.save();
-    await comment.populate("userId", "displayName linkedAccounts");
+    await comment.populate("userId", REVIEW_AUTHOR);
 
     res.json(comment);
   } catch (e) {
@@ -312,17 +390,11 @@ router.delete("/comments/:id", requireAuth, writeLimiter, async (req, res) => {
       return res.status(403).json({});
     }
 
-    await ReviewComment.deleteMany({
-      $or: [
-        { _id: comment._id },
-        { parentId: comment._id }
-      ]
-    });
+    // The comment and all replies under it (not just the direct ones:
+    // replies to replies used to be left behind, parentless).
+    const deleted = await deleteCommentTree({ _id: comment._id });
 
-    await deleteNotification({ entityId: comment._id });
-    await deleteActivity({ entityId: comment._id });
-
-    res.json({ ok: true });
+    res.json({ ok: true, deleted });
   } catch (e) {
     logger.error({ err: e }, "delete comment failed");
     res.status(500).json({});
@@ -354,22 +426,41 @@ router.post("/:rawgId", requireAuth, writeLimiter, async (req, res) => {
       : null;
 
 
-    const review = await GameReview.findOneAndUpdate(
-  { userId: req.user._id, rawgId: req.params.rawgId },
-  {
-    verdict,
-    title,
-    body,
-    pros: normalizeTags(pros, PRO_TAGS),
-    cons: normalizeTags(cons, CON_TAGS),
-    completed,
-    steamAppId,
-    playtimeHours: playtime,
-    edited: true,
-    visibility: "public"
-  },
-  { upsert: true, new: true }
-);
+    // One review per user per game (also a unique index): posting again is
+    // refused, not merged; changes go through PUT /:id.
+    const existing = await GameReview.findOne(
+      { userId: req.user._id, rawgId: req.params.rawgId },
+      { _id: 1 }
+    ).lean();
+    if (existing) {
+      return res.status(409).json({ error: "You've already reviewed this game.", reviewId: existing._id });
+    }
+
+    let review;
+    try {
+      review = await GameReview.create({
+        userId: req.user._id,
+        rawgId: req.params.rawgId,
+        verdict,
+        title,
+        body,
+        pros: normalizeTags(pros, "pros"),
+        cons: normalizeTags(cons, "cons"),
+        completed,
+        steamAppId,
+        playtimeHours: playtime,
+        visibility: "public"
+      });
+    } catch (err) {
+      // Two posts racing: the unique index lets only one through.
+      if (err?.code === 11000) {
+        return res.status(409).json({ error: "You've already reviewed this game." });
+      }
+      throw err;
+    }
+
+// Posted: the auto-saved draft (if any) has done its job.
+await ReviewDraft.deleteOne({ userId: req.user._id, rawgId: req.params.rawgId }).catch(() => {});
 
 
 // 🔔 Mentions in review title/body
@@ -391,17 +482,17 @@ if (mentions.length) {
       text: `${req.user.displayName} mentioned you in a review`,
       url: `/game/${req.params.rawgId}`
     });
-    // AFTER review is saved
-await createActivity({
-  userId: req.user._id,
-  type: "review",
-  entityId: review._id,
-  text: `${req.user.displayName} reviewed a game`,
-  url: `/game/${req.params.rawgId}`
-});
-
   }
 }
+
+    // One activity entry per review, mentions or not.
+    await createActivity({
+      userId: req.user._id,
+      type: "review",
+      entityId: review._id,
+      text: "reviewed a game",
+      url: `/game/${req.params.rawgId}`
+    });
 
     res.json(review);
   } catch (e) {
@@ -412,10 +503,13 @@ await createActivity({
 router.post("/:id/like", requireAuth, writeLimiter, async (req, res) => {
 
   try {
-    await GameReview.findByIdAndUpdate(req.params.id, {
-      $addToSet: { likes: req.user._id }
-    });
-    const review = await GameReview.findById(req.params.id);
+    // $addToSet makes a repeat like a no-op, and { new: true } returns the
+    // updated review in the same round trip.
+    const review = await GameReview.findByIdAndUpdate(
+      req.params.id,
+      { $addToSet: { likes: req.user._id } },
+      { new: true, lean: true }
+    );
 
 if (
   review &&
@@ -430,12 +524,13 @@ if (
     url: `/game/${review.rawgId}`
   });
   await createActivity({
-  userId: req.user._id,
-  type: "like",
-  entityId: review._id,
-  text: `${req.user.displayName} liked a review`,
-  url: `/game/${review.rawgId}`
-});
+    userId: req.user._id,
+    type: "like",
+    entityId: review._id,
+    // The feed already shows who did it, so the text starts with the verb.
+    text: "liked a review",
+    url: `/game/${review.rawgId}`
+  });
 
 }
 
@@ -457,16 +552,19 @@ router.delete("/:id", requireAuth, writeLimiter, async (req, res) => {
       return res.status(403).json({});
     }
 
-    // 🧹 Delete related comments
-    await ReviewComment.deleteMany({ reviewId: review._id });
+    // The review goes first, so a comment posted meanwhile is refused (the
+    // comment route checks the review exists) instead of outliving it.
+    await review.deleteOne();
 
-    // 🧹 Delete notifications related to this review
-    await deleteNotification({ entityId: review._id });
+    // 🧹 Its whole comment thread, with those comments' notifications/activity
+    await deleteCommentTree({ reviewId: review._id });
 
-    // 🧹 Delete activities related to this review
+    // 🧹 Notifications and activities about the review itself (all of them)
+    await Notification.deleteMany({ entityId: review._id });
     await deleteActivity({ entityId: review._id });
 
-    await review.deleteOne();
+    // 🧹 An auto-saved edit of this review has nothing left to edit
+    await ReviewDraft.deleteOne({ userId: req.user._id, reviewId: review._id });
 
     res.json({ ok: true });
   } catch (e) {

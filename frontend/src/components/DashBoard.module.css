@@ -83,7 +83,7 @@
 
 .profileInput:focus {
   outline: none;
-  border-color: #7cf7ff;
+  border-color: #d4956e;
 }
 
 .accountsCard h3 {
@@ -108,7 +108,7 @@
   padding: 4px 12px;
   border-radius: 999px;
   background: rgba(124,247,255,0.15);
-  color: #7cf7ff;
+  color: #d4956e;
 }
 
 .connectBtn {

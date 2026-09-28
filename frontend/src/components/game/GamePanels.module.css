@@ -1,0 +1,552 @@
+/* The glass panels between the title panel and "Players & ratings": About,
+   Media, and the facts column (Details, Where to get it, Features, Tags,
+   Age rating). The title panel's language (GameHero.module.css): near-black
+   glass, hairlines, uppercase labels, hollow controls that light up in the
+   game's colour. --tint is the game's colour, set on the page container
+   (GameDetails; the site's warm accent until it's known). The sections further
+   down keep the flat styles of Game.module.css. No blur or backdrop
+   filters (Chrome ghosting). */
+
+.stack { display: flex; flex-direction: column; gap: 16px; }
+
+.panel {
+  position: relative;
+  padding: 18px 20px 20px 24px;
+  border-radius: 16px;
+  background:
+    radial-gradient(120% 120% at 0% 0%, color-mix(in srgb, var(--tint, #d4956e) 7%, transparent), transparent 55%),
+    linear-gradient(180deg, #07090d 0%, #0a0d13 100%);
+  border: 1px solid color-mix(in srgb, var(--tint, #d4956e) 10%, rgba(255, 255, 255, 0.06));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+/* the game's colour as a glowing edge on the left, like the title panel's */
+.panel::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 18px;
+  bottom: 18px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--tint, #d4956e);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--tint, #d4956e) 70%, transparent);
+}
+
+/* a panel's label, like the modal's: uppercase, muted, a count on the right */
+.title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 14px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8b949e;
+}
+.titleSub { font-size: 12px; font-weight: 500; letter-spacing: 0; text-transform: none; color: #6e7681; }
+.count {
+  margin-left: auto;
+  min-width: 20px;
+  padding: 1px 8px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  color: #c9d1d9;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* ── about ── */
+.desc { font-size: 15.5px; line-height: 1.75; color: #d0d7de; }
+.desc > :first-child { margin-top: 0; }
+.desc > :last-child { margin-bottom: 0; }
+
+/* ── facts ── */
+.factList {
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr);
+  margin: 0;
+  font-size: 14px;
+}
+.factList dt,
+.factList dd {
+  padding: 9px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+.factList dt:first-of-type,
+.factList dt:first-of-type + dd { border-top: none; padding-top: 0; }
+.factList dt { color: #8b949e; }
+.factList dd { margin: 0; color: #e6edf3; word-break: break-word; }
+
+/* stores: the dock's buttons, lighting up in the game's colour */
+.storeList { display: flex; flex-direction: column; gap: 6px; }
+.storeLink {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  height: 42px;
+  padding: 0 14px 0 16px;
+  box-sizing: border-box;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #e6edf3;
+  text-decoration: none;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: color 0.2s ease, background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.storeLink svg { flex: none; color: #6e7681; transition: color 0.2s ease, transform 0.2s ease; }
+/* (sets the colour itself: the site-wide a:hover would turn it blue) */
+.storeLink:hover {
+  color: color-mix(in srgb, var(--tint, #d4956e) 80%, #ffffff);
+  background: color-mix(in srgb, var(--tint, #d4956e) 10%, transparent);
+  border-color: color-mix(in srgb, var(--tint, #d4956e) 55%, transparent);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--tint, #d4956e) 18%, transparent);
+}
+.storeLink:hover svg { color: var(--tint, #d4956e); transform: translate(1px, -1px); }
+.storeLink:focus-visible { outline: 2px solid var(--tint, #d4956e); outline-offset: 2px; }
+
+/* tags and features: round hollow chips */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  padding: 4px 11px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #c9d1d9;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.chip:hover {
+  color: color-mix(in srgb, var(--tint, #d4956e) 75%, #ffffff);
+  border-color: color-mix(in srgb, var(--tint, #d4956e) 45%, transparent);
+}
+
+/* age ratings: the board and rating as a keycap */
+.ageRow { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.ageRow + .ageRow { margin-top: 8px; }
+.ageBox {
+  flex: none;
+  min-width: 44px;
+  padding: 4px 9px;
+  box-sizing: border-box;
+  text-align: center;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--tint, #d4956e) 80%, #ffffff);
+  background: color-mix(in srgb, var(--tint, #d4956e) 8%, transparent);
+  border: 1.5px solid color-mix(in srgb, var(--tint, #d4956e) 45%, transparent);
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.35);
+}
+.ageText { color: #c9d1d9; }
+.ageNote { margin: 10px 0 0; font-size: 12.5px; line-height: 1.5; color: #8b949e; }
+
+/* ── media ── */
+.viewer {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 12px;
+  background: #000;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+.viewer { touch-action: pan-y; } /* a horizontal swipe changes the item */
+.viewer img,
+.viewer video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+.viewerNav {
+  all: unset;
+  cursor: pointer;
+  position: absolute;
+  top: 50%;
+  margin-top: -19px;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #e6edf3;
+  background: rgba(7, 9, 13, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  transition: color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.viewerNav:hover {
+  color: var(--tint, #d4956e);
+  border-color: color-mix(in srgb, var(--tint, #d4956e) 60%, transparent);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--tint, #d4956e) 30%, transparent);
+}
+.viewerNav:focus-visible { outline: 2px solid var(--tint, #d4956e); outline-offset: 2px; }
+.viewerPrev { left: 12px; }
+.viewerNext { right: 12px; }
+
+.thumbs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 10px 2px 4px;
+  scrollbar-width: none; /* position is shown by the dash pager below */
+}
+.thumbs::-webkit-scrollbar { display: none; }
+.thumb {
+  all: unset;
+  cursor: pointer;
+  position: relative;
+  /* fill the strip's width; never smaller than 136px (the strip scrolls) */
+  flex: 1 0 136px;
+  max-width: 240px;
+  aspect-ratio: 16 / 9;
+  box-sizing: border-box;
+  overflow: hidden;
+  border-radius: 10px;
+  border: 2px solid transparent;
+  opacity: 0.7;
+  transition: opacity 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.thumb:hover { opacity: 1; border-color: rgba(255, 255, 255, 0.18); }
+.thumb:focus-visible { outline: 2px solid var(--tint, #d4956e); outline-offset: 2px; }
+.thumbActive,
+.thumbActive:hover {
+  opacity: 1;
+  border-color: var(--tint, #d4956e);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--tint, #d4956e) 40%, transparent);
+}
+/* a trailer's play mark: a small solid disc, no darkening over the image */
+.playGlyph { position: absolute; inset: 0; display: grid; place-items: center; color: #fff; }
+.playGlyph svg { box-sizing: content-box; padding: 7px; border-radius: 50%; background: rgba(7, 9, 13, 0.85); }
+
+.videoError {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  text-align: center;
+  color: #c9d1d9;
+}
+.link { color: var(--tint, #d4956e); text-decoration: none; }
+.link:hover { text-decoration: underline; }
+
+/* ── news (GameNews) ── */
+
+/* tabs: round chips, the active one in the game's colour */
+.newsTabs { display: flex; flex-wrap: wrap; gap: 6px; margin: -2px 0 14px; }
+.newsTab {
+  all: unset;
+  cursor: pointer;
+  padding: 5px 14px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #8b949e;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+.newsTab:hover { color: #e6edf3; background: rgba(255, 255, 255, 0.07); }
+.newsTab:focus-visible { outline: 2px solid var(--tint, #d4956e); outline-offset: 2px; }
+.newsTabOn,
+.newsTabOn:hover {
+  color: color-mix(in srgb, var(--tint, #d4956e) 75%, #ffffff);
+  background: color-mix(in srgb, var(--tint, #d4956e) 12%, transparent);
+  border-color: color-mix(in srgb, var(--tint, #d4956e) 45%, transparent);
+}
+
+/* The posts in order, one open at a time. Opening grows a post in place:
+   its image widens from a thumbnail to about half the card (--art, animated
+   as a registered length), the title grows and the excerpt slides out, while
+   the one that was open folds back into a row the same way. */
+@property --art {
+  syntax: "<length-percentage>";
+  inherits: false;
+  initial-value: 112px;
+}
+.newsItems { display: flex; flex-direction: column; gap: 8px; }
+.newsItem {
+  --art: 112px;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  display: grid;
+  grid-template-columns: var(--art) minmax(0, 1fr);
+  align-items: center;
+  column-gap: 14px;
+  padding: 8px 14px 8px 8px;
+  border-radius: 12px;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition:
+    --art 0.5s var(--ease),
+    padding 0.5s var(--ease),
+    column-gap 0.5s var(--ease),
+    border-radius 0.5s var(--ease),
+    background 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+.newsItem:not(.newsItemOpen):hover {
+  background: color-mix(in srgb, var(--tint, #d4956e) 8%, transparent);
+  border-color: color-mix(in srgb, var(--tint, #d4956e) 45%, transparent);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--tint, #d4956e) 14%, transparent);
+}
+.newsItem:focus-visible { outline: 2px solid var(--tint, #d4956e); outline-offset: 2px; }
+.newsItemOpen {
+  --art: 44%;
+  align-items: start;
+  column-gap: 18px;
+  padding: 12px;
+  border-radius: 14px;
+  cursor: default;
+}
+.newsArt {
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #05070a;
+  transition: border-radius 0.5s var(--ease);
+}
+.newsItemOpen .newsArt { border-radius: 10px; }
+.newsArt img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.newsBody {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  transition: gap 0.5s var(--ease), padding 0.5s var(--ease);
+}
+/* Open: the text column is exactly as tall as the image (it takes no
+   height of its own, so the image sets the row), the text scrolling in the
+   space left under the title. */
+.newsItemOpen .newsBody { gap: 8px; padding: 4px 0 0; align-self: stretch; contain: size; }
+.newsItemTitle {
+  flex-shrink: 0; /* the open post's text takes the squeeze, not the title */
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: #e6edf3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  transition: font-size 0.5s var(--ease), color 0.2s ease;
+}
+.newsItemOpen .newsItemTitle { font-size: 18px; font-weight: 700; line-height: 1.35; color: #f0f6fc; -webkit-line-clamp: 4; }
+/* the excerpt: a row that grows from 0 to its height, fading in after */
+.newsReveal {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows 0.5s var(--ease), opacity 0.25s ease;
+}
+.newsItemOpen .newsReveal {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transition: grid-template-rows 0.5s var(--ease), opacity 0.35s ease 0.15s;
+}
+.newsReveal > div { min-height: 0; overflow: hidden; }
+.newsTextBox { position: relative; --accent: var(--tint, #d4956e); }
+.newsText {
+  height: 100%;
+  box-sizing: border-box;
+  overflow-y: auto;
+  padding: 2px 18px 1.2em 0;
+  white-space: pre-line;
+  font-size: 14px;
+  line-height: 1.65;
+  color: #b1bac4;
+  outline: none;
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 1.2em), transparent);
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 1.2em), transparent);
+}
+/* the page's scrollbar, only while you're over (or in) the text */
+.newsRail { opacity: 0; transition: opacity 0.2s ease; }
+.newsTextBox:hover .newsRail,
+.newsTextBox:focus-within .newsRail,
+.newsRail:active { opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .newsItem, .newsArt, .newsBody, .newsItemTitle, .newsReveal, .newsItemOpen .newsReveal { transition: none; }
+}
+
+/* no image: a quiet tile with a newspaper */
+.newsArtEmpty {
+  display: grid;
+  place-items: center;
+  color: color-mix(in srgb, var(--tint, #d4956e) 55%, transparent);
+  background: color-mix(in srgb, var(--tint, #d4956e) 6%, #05070a);
+}
+
+.newsMeta { flex-shrink: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; color: #6e7681; }
+.newsBadge {
+  padding: 1px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--tint, #d4956e) 80%, #ffffff);
+  background: color-mix(in srgb, var(--tint, #d4956e) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tint, #d4956e) 40%, transparent);
+}
+.newsSource { font-weight: 600; color: #8b949e; }
+/* new since your last visit */
+.newDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--tint, #d4956e);
+  box-shadow: 0 0 8px var(--tint, #d4956e);
+}
+
+/* pages of older posts: round chips, the current one in the game's colour */
+.newsPager { display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin-top: 14px; }
+.newsError { margin-right: auto; font-size: 12.5px; color: #f85149; }
+.pageBtn {
+  all: unset;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 8px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #8b949e;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.pageBtn:hover:not(:disabled) { color: #e6edf3; background: rgba(255, 255, 255, 0.08); }
+.pageBtn:disabled { cursor: default; opacity: 0.35; }
+.pageBtn:focus-visible { outline: 2px solid var(--tint, #d4956e); outline-offset: 2px; }
+.pageGap { min-width: 16px; text-align: center; font-size: 13px; color: #6e7681; user-select: none; }
+/* "Load more": a labelled pill, hollow in the game's colour like the dock's buttons */
+.loadMore {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 14px 0 16px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--tint, #d4956e) 85%, #ffffff);
+  background: color-mix(in srgb, var(--tint, #d4956e) 10%, transparent);
+  border: 1.5px solid color-mix(in srgb, var(--tint, #d4956e) 60%, transparent);
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+.loadMore:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--tint, #d4956e) 20%, transparent);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--tint, #d4956e) 28%, transparent);
+}
+.loadMore:disabled { cursor: default; opacity: 0.7; }
+.loadMore:focus-visible { outline: 2px solid var(--tint, #d4956e); outline-offset: 2px; }
+.pageBtnOn,
+.pageBtnOn:hover:not(:disabled) {
+  color: color-mix(in srgb, var(--tint, #d4956e) 80%, #ffffff);
+  background: color-mix(in srgb, var(--tint, #d4956e) 14%, transparent);
+  border-color: color-mix(in srgb, var(--tint, #d4956e) 50%, transparent);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--tint, #d4956e) 20%, transparent);
+}
+.spin { animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 760px) {
+  .newsItem { --art: 88px; }
+  .newsItemOpen { --art: 100%; grid-template-columns: minmax(0, 1fr); row-gap: 12px; }
+  .newsItemOpen .newsBody { contain: none; }
+  .newsText { max-height: 320px; }
+}
+
+/* ── system requirements (GameRequirements) ── */
+.reqLines { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+.reqLine {
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  color: #c9d1d9;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* one row per spec: label | Minimum | Recommended */
+.reqTable {
+  --req-cols: 130px minmax(0, 1fr);
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.reqTableTwo { --req-cols: 130px minmax(0, 1fr) minmax(0, 1fr); }
+.reqHead,
+.reqRow {
+  display: grid;
+  grid-template-columns: var(--req-cols);
+  column-gap: 18px;
+  padding: 10px 16px;
+}
+.reqHead {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8b949e;
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.reqRecHead { color: color-mix(in srgb, var(--tint, #d4956e) 80%, #ffffff); }
+.reqRow + .reqRow { border-top: 1px solid rgba(255, 255, 255, 0.05); }
+.reqRow:hover { background: rgba(255, 255, 255, 0.02); }
+.reqLabel { font-size: 13px; font-weight: 600; color: #8b949e; }
+.reqCell { font-size: 13.5px; line-height: 1.5; color: #d0d7de; word-break: break-word; }
+/* the recommended column carries a hint of the game's colour */
+.reqRec { color: #e6edf3; }
+.reqTableTwo .reqRow > .reqRec { padding-left: 14px; border-left: 2px solid color-mix(in srgb, var(--tint, #d4956e) 35%, transparent); }
+
+/* notes and legal text, folded */
+.reqNotes { margin-top: 12px; }
+.reqNotesToggle {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--tint, #d4956e) 80%, #ffffff);
+}
+.reqNotesToggle:hover { text-decoration: underline; }
+.reqNotesToggle:focus-visible { outline: 2px solid var(--tint, #d4956e); outline-offset: 2px; border-radius: 4px; }
+.reqNotesToggle svg { transition: transform 0.2s ease; }
+.reqNotesOpen { transform: rotate(180deg); }
+.reqNotesBody { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.reqNotesBody p { margin: 0; font-size: 13px; line-height: 1.55; color: #b1bac4; }
+.reqNotesBody b { color: #c9d1d9; }
+.reqNotesBody .reqLegal { font-size: 11.5px; color: #6e7681; }
+
+@media (max-width: 760px) {
+  .reqTable, .reqTableTwo { --req-cols: minmax(0, 1fr); }
+  .reqHead { display: none; }
+  .reqRow { row-gap: 4px; }
+  .reqTableTwo .reqRow > .reqRec { padding-left: 10px; }
+}

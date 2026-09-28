@@ -1,0 +1,103 @@
+/* The site's dropdown (Select.jsx): a hollow pill that opens a dark glass
+   menu in the page's accent (--accent, carried over to the menu since it
+   renders on <body>). No backdrop blur (Chrome ghosting). */
+
+.trigger {
+  all: unset;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 11px 0 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #c9d1d9;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+.trigger:hover { color: #f0f6fc; background: rgba(255, 255, 255, 0.07); }
+.trigger:focus-visible { outline: 2px solid var(--accent, #d4956e); outline-offset: 2px; }
+.open,
+.open:hover {
+  color: #f0f6fc;
+  border-color: color-mix(in srgb, var(--accent, #d4956e) 50%, transparent);
+  background: color-mix(in srgb, var(--accent, #d4956e) 8%, transparent);
+}
+.value { display: inline-grid; min-width: 0; text-align: left; }
+/* every option's label in one cell, only the picked one visible: the
+   button is always as wide as its longest option, so it never resizes */
+.value > span { grid-area: 1 / 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.value > .ghost { visibility: hidden; }
+.full .value { display: grid; flex: 1; grid-template-columns: minmax(0, 1fr); }
+.chevron { flex: none; color: #6e7681; transition: transform 0.2s ease, color 0.15s ease; }
+.open .chevron { transform: rotate(180deg); color: var(--accent, #d4956e); }
+
+/* small, over art (a card's shelf) */
+.sm {
+  height: 26px;
+  gap: 5px;
+  padding: 0 7px 0 10px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #e6edf3;
+  background: rgba(5, 7, 10, 0.85);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+.sm:hover { background: rgba(5, 7, 10, 0.92); }
+
+/* as wide as its container (a form field) */
+.full { display: flex; width: 100%; justify-content: space-between; }
+
+.menu {
+  position: fixed;
+  z-index: 1000;
+  box-sizing: border-box;
+  max-height: 288px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--accent, #d4956e) 35%, transparent) transparent;
+  margin: 0;
+  padding: 5px;
+  list-style: none;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #0d1117 0%, #0a0d13 100%);
+  border: 1px solid color-mix(in srgb, var(--accent, #d4956e) 22%, rgba(255, 255, 255, 0.08));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 20px 50px rgba(0, 0, 0, 0.6),
+    0 0 30px color-mix(in srgb, var(--accent, #d4956e) 8%, transparent);
+  animation: menuIn 0.14s ease-out;
+}
+.menuUp { animation-name: menuInUp; }
+@keyframes menuIn { from { opacity: 0; transform: translateY(-4px); } }
+@keyframes menuInUp { from { opacity: 0; transform: translateY(4px); } }
+@media (prefers-reduced-motion: reduce) {
+  .menu { animation: none; }
+}
+
+/* label on the left, the check (picked one only) on the right */
+.option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 7px 10px 7px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #8b949e;
+  transition: color 0.12s ease, background 0.12s ease;
+}
+.option + .option { margin-top: 1px; }
+.check { flex: none; color: var(--accent, #d4956e); visibility: hidden; }
+.active { color: #e6edf3; background: rgba(255, 255, 255, 0.05); }
+.selected { color: #f0f6fc; background: color-mix(in srgb, var(--accent, #d4956e) 10%, transparent); }
+.selected.active { background: color-mix(in srgb, var(--accent, #d4956e) 15%, transparent); }
+.selected .check { visibility: visible; }

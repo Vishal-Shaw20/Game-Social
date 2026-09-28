@@ -1,83 +1,85 @@
-.reviewComments {
-  margin-top: 24px;
-  padding-top: 24px;
-  border-top: 1px solid rgba(255,255,255,0.08);
+/* A review's comment thread (inside the game dock's review cards). Dock
+   language: dark glass writing box, hollow accent action. */
+
+.thread { display: flex; flex-direction: column; gap: 10px; }
+
+.error { color: #f85149; font-size: 13px; margin: 0; }
+.empty { color: #6e7681; font-size: 13px; margin: 0; }
+
+.box {
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, #06080c, #0a0d13);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 14px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.box:focus-within {
+  border-color: rgba(212, 149, 110, 0.45);
+  box-shadow: 0 0 0 3px rgba(212, 149, 110, 0.07);
 }
 
-.reviewComments textarea {
+/* MentionInput's textarea, frameless inside the box */
+.box textarea {
   width: 100%;
-  margin-top: 14px;
-  background: rgba(255,255,255,0.03);
-  color: white;
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 18px;
-  padding: 12px 16px;
-  font-size: 14px;
-  font-family: inherit;
-  line-height: 1.6;
-  resize: vertical;
-  backdrop-filter: blur(6px);
-  transition: all 0.2s ease;
-}
-
-.reviewComments textarea::placeholder {
-  color: rgba(255,255,255,0.4);
-}
-
-.reviewComments textarea:focus {
-  outline: none;
-  background: rgba(255,255,255,0.06);
-  border-color: rgba(96,165,250,0.6);
-  box-shadow: 0 0 0 2px rgba(96,165,250,0.15);
-}
-
-.reviewComments button {
-  margin-top: 12px;
-  margin-right: 10px;
-  background: linear-gradient(
-    135deg,
-    rgba(46,160,67,0.9),
-    rgba(46,160,67,0.6)
-  );
+  box-sizing: border-box;
+  resize: none;
+  background: transparent;
   border: none;
-  color: white;
-  padding: 8px 20px;
-  border-radius: 999px;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 600;
-  backdrop-filter: blur(6px);
-  transition: all 0.2s ease;
-}
-
-.reviewComments button:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(46,160,67,0.35);
-}
-
-.reviewComments button:active:not(:disabled) {
-  transform: translateY(0);
-}
-
-.reviewComments button:disabled {
-  background: rgba(255,255,255,0.08);
-  color: rgba(255,255,255,0.4);
-  cursor: not-allowed;
   box-shadow: none;
+  padding: 12px 16px 4px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #e6edf3;
+}
+.box textarea:focus { border: none; box-shadow: none; outline: none; }
+
+.boxFoot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 6px 8px 8px 16px;
 }
 
-.reviewComments button:focus-visible {
-  outline: 2px solid rgba(96,165,250,0.6);
-  outline-offset: 2px;
+.context {
+  margin-right: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #8b949e;
 }
 
-.cancelBtn {
-  background: transparent !important;
-  border: 1px solid rgba(255,255,255,0.12) !important;
-  color: rgba(255,255,255,0.85) !important;
+.clear {
+  all: unset;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  color: #8b949e;
 }
+.clear:hover { background: rgba(255, 255, 255, 0.1); color: #e6edf3; }
 
-.cancelBtn:hover:not(:disabled) {
-  background: rgba(255,255,255,0.12) !important;
-  box-shadow: none !important;
+.send,
+.ghost {
+  all: unset;
+  cursor: pointer;
+  padding: 6px 16px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
 }
+.send {
+  color: #d4956e;
+  background: rgba(212, 149, 110, 0.08);
+  border: 1.5px solid rgba(212, 149, 110, 0.6);
+}
+.send:hover:not(:disabled) { background: rgba(212, 149, 110, 0.18); box-shadow: 0 0 14px rgba(212, 149, 110, 0.25); }
+.send:disabled { cursor: default; color: rgba(255, 255, 255, 0.3); border-color: rgba(255, 255, 255, 0.1); background: transparent; }
+.ghost { color: #8b949e; font-weight: 600; }
+.ghost:hover { color: #e6edf3; }
+.send:focus-visible, .ghost:focus-visible { outline: 2px solid #d4956e; outline-offset: 2px; }

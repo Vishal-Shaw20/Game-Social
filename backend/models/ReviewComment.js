@@ -36,5 +36,7 @@ const ReviewCommentSchema = new mongoose.Schema(
 );
 
 ReviewCommentSchema.index({ reviewId: 1, parentId: 1 });
+// A review's comment thread, oldest first.
+ReviewCommentSchema.index({ reviewId: 1, createdAt: 1 });
 
 export default mongoose.model("ReviewComment", ReviewCommentSchema);

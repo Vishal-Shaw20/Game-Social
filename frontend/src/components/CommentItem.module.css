@@ -1,92 +1,84 @@
-.comment {
-  margin-top: 14px;
-  padding: 16px;
-  background: rgba(255,255,255,0.04);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 22px;
-  transition: all 0.25s ease;
-}
+/* One comment in a review thread (game dock). Flat, compact; replies nest
+   under a thin guide line. */
 
-.comment:hover {
-  background: rgba(255,255,255,0.12);
-  transform: translateY(-1px);
-  box-shadow: 0 10px 32px rgba(0,0,0,0.25);
-}
+.comment { display: flex; flex-direction: column; gap: 4px; }
 
-.commentMeta {
-  font-size: 13px;
-  opacity: 0.7;
-  margin-bottom: 6px;
-}
+.head { display: flex; align-items: center; gap: 8px; }
 
-.commentMeta strong {
-  color: white;
-  font-weight: 600;
-}
-
-.edited {
-  font-size: 11px;
-  opacity: 0.5;
-  margin-left: 6px;
-}
-
-.commentBody {
-  font-size: 14px;
-  line-height: 1.6;
-  color: rgba(255,255,255,0.85);
-  margin: 10px 0;
-}
-
-.commentActions {
-  display: flex;
+.author {
+  display: inline-flex;
+  align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
-  margin-top: 10px;
+  color: inherit;
+  text-decoration: none;
+}
+a.author:hover .name { text-decoration: underline; }
+
+.avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #c9d1d9;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  flex: none;
 }
 
-.commentActions button {
-  background: transparent;
-  border: 1px solid rgba(255,255,255,0.12);
-  color: rgba(255,255,255,0.85);
-  padding: 6px 14px;
-  border-radius: 999px;
+.name { font-size: 13px; font-weight: 600; }
+.when { font-size: 11px; color: #6e7681; }
+
+.body {
+  margin-left: 32px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: #d0d7de;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.actions {
+  margin-left: 26px;
+  display: flex;
+  gap: 2px;
+}
+.actions button {
+  all: unset;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 999px;
   font-size: 12px;
-  font-weight: 500;
-  backdrop-filter: blur(6px);
-  transition: all 0.2s ease;
+  color: #6e7681;
+  transition: background 0.2s ease, color 0.2s ease;
 }
-
-.commentActions button:hover {
-  background: rgba(255,255,255,0.12);
-  transform: translateY(-1px);
+.actions button:hover:not(:disabled) { background: rgba(255, 255, 255, 0.06); color: #e6edf3; }
+.actions button:disabled { cursor: default; }
+.actions button:focus-visible { outline: 2px solid #d4956e; outline-offset: 1px; }
+/* the parent review's verdict colour (--c from its card) */
+.actions .liked { color: var(--c, #ff7b72); }
+/* the pencil of the comment being edited, lit the same way */
+.actions .active {
+  color: var(--c, #d4956e);
+  background: color-mix(in srgb, var(--c, #d4956e) 12%, transparent);
 }
-
-.commentActions button:active {
-  transform: translateY(0);
+.actions .active:hover:not(:disabled) {
+  color: var(--c, #d4956e);
+  background: color-mix(in srgb, var(--c, #d4956e) 18%, transparent);
 }
+.actions .danger:hover { color: #f85149; }
 
-.commentActions button:focus-visible {
-  outline: 2px solid rgba(96,165,250,0.6);
-  outline-offset: 2px;
-}
-
-.likeBtn.liked {
-  background: rgba(248,81,73,0.15);
-  border-color: rgba(248,81,73,0.6);
-  color: #f85149;
-}
-
-.likeBtn.liked:hover {
-  background: rgba(248,81,73,0.25);
-}
-
-.danger {
-  border-color: rgba(248,81,73,0.6) !important;
-  color: #f85149 !important;
-}
-
-.danger:hover {
-  background: rgba(248,81,73,0.15) !important;
+.replies {
+  margin: 6px 0 0 11px;
+  padding-left: 18px;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }

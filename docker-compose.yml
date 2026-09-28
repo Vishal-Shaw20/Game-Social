@@ -19,6 +19,9 @@ services:
     environment:
       - NODE_ENV=production
       - GAMIQ_URL=http://gamiq:8000
+      # Overrides the REDIS_URL in backend/.env, which points at localhost for
+      # local dev — inside the container that would be the container itself.
+      - REDIS_URL=redis://redis:6379
     depends_on:
       - redis
     restart: unless-stopped

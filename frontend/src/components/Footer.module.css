@@ -1,41 +1,142 @@
-.appFooter {
-  width: 100%;
-  padding: 28px 48px;
-  box-sizing: border-box;
-  background: linear-gradient(
-    to top,
-    rgba(5, 7, 12, 0.85),
-    rgba(5, 7, 12, 0.55)
-  );
-  backdrop-filter: blur(12px);
-  border-top: 1px solid rgba(148, 163, 184, 0.18);
+/* Full-bleed at the foot of the homepage. Escapes the page gutter the same way
+   the carousels do (--page-pad from HomePage.module.css), then re-applies it
+   inside so the content lines up with the section titles above. It is the
+   last thing on the page: nothing scrolls below it, and the search dock
+   hides once it's fully in view (HomePage.jsx), so it needs no extra room
+   for the dock. */
+.footer {
+  margin: 56px calc(var(--page-pad, 0px) * -1) 0;
+  padding: 44px var(--page-pad, 24px) 28px;
+  background: linear-gradient(to bottom, rgba(5, 7, 12, 0.35), rgba(5, 7, 12, 0.8));
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.08) inset;
+  color: var(--color-text-secondary);
 }
 
-.footerInner {
-  width: 100%;
+.inner {
   max-width: 1600px;
   margin: 0 auto;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 13px;
-  line-height: 1.8;
-  color: #94a3b8;
-  letter-spacing: 0.05em;
 }
 
-.footerRight {
-  opacity: 0.85;
+.top {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) repeat(3, minmax(0, 1fr));
+  gap: 40px;
+}
+
+.brand {
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: 0.35em;
+  text-transform: uppercase;
+  color: #f1f5ff;
+  text-decoration: none;
+}
+
+.tagline {
+  max-width: 34ch;
+  margin: 14px 0 18px;
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  color: var(--color-text-tertiary);
+}
+
+.social {
+  display: flex;
+  gap: 10px;
+}
+
+/* Same dark-glass tag as the cards and the spotlight stats. */
+.social a {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-md, 8px);
+  background: rgba(5, 7, 12, 0.55);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+  color: var(--color-text-secondary);
+  transition: color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.social a:hover {
+  color: #fff;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.28) inset;
+}
+
+/* Same kicker as "TRENDING ON STEAM". */
+.heading {
+  margin: 0 0 14px;
+  font-size: 11px;
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.col ul {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.col a,
+.bottom a {
+  color: var(--color-text-secondary);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.col a {
+  font-size: var(--text-sm);
+}
+
+.col a:hover,
+.bottom a:hover {
+  color: #fff;
+}
+
+.col a:focus-visible,
+.bottom a:focus-visible,
+.social a:focus-visible,
+.brand:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.bottom {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 24px;
+  margin-top: 40px;
+  padding-top: 20px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.08) inset;
+  font-size: var(--text-xs);
+  color: var(--color-text-tertiary);
+}
+
+@media (max-width: 900px) {
+  .top {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .brandCol {
+    grid-column: 1 / -1;
+  }
 }
 
 @media (max-width: 768px) {
-  .appFooter {
-    padding: 24px 20px;
+  .footer {
+    /* Clear of the fixed left sidebar rail on narrow screens. */
+    padding-left: max(var(--page-pad, 16px), 72px);
   }
 
-  .footerInner {
-    flex-direction: column;
-    gap: 10px;
-    text-align: center;
+  .top {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 28px;
   }
 }

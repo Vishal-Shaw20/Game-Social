@@ -7,6 +7,23 @@ vi.mock("../models/User.js", () => ({
   default: {
     find: vi.fn(),
     findById: vi.fn(),
+    exists: vi.fn(),
+    updateOne: vi.fn(),
+  },
+}));
+
+vi.mock("../models/FriendRequest.js", () => ({
+  default: {
+    find: vi.fn(),
+    create: vi.fn(),
+    findOneAndDelete: vi.fn(),
+  },
+}));
+
+vi.mock("../models/Notification.js", () => ({
+  default: {
+    updateMany: vi.fn(),
+    deleteMany: vi.fn(),
   },
 }));
 
@@ -28,6 +45,15 @@ vi.mock("../utils/createNotification.js", () => ({
   createNotification: vi.fn(),
 }));
 
+vi.mock("../utils/createActivity.js", () => ({
+  createActivity: vi.fn(),
+}));
+
+vi.mock("../social/realtime.js", () => ({
+  emitToUsers: vi.fn(),
+  emitToUser: vi.fn(),
+}));
+
 vi.mock("../config/logger.js", () => ({
   default: {
     error: vi.fn(),
@@ -45,10 +71,21 @@ vi.mock("../middleware/requireAuth.js", () => ({
 }));
 
 import User from "../models/User.js";
+import FriendRequest from "../models/FriendRequest.js";
+import { createNotification } from "../utils/createNotification.js";
+import { createActivity } from "../utils/createActivity.js";
+import { emitToUsers } from "../social/realtime.js";
 import friendRoutes from "../routes/friendRoutes.js";
 
 const userId = new mongoose.Types.ObjectId();
 const otherId = new mongoose.Types.ObjectId();
+
+const me = (friends = []) => ({
+  _id: userId,
+  username: "me",
+  displayName: "Me",
+  friends,
+});
 
 function createApp(user) {
   const app = express();
@@ -61,95 +98,162 @@ function createApp(user) {
   return app;
 }
 
+// Mongoose query chains used by the routes: find().lean(), findById().lean()
+const lean = (value) => ({ lean: vi.fn().mockResolvedValue(value) });
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
 describe("GET /api/friends", () => {
   it("returns empty array when user has no friends", async () => {
-    const app = createApp({ _id: userId, friends: [] });
-    const res = await request(app).get("/api/friends");
+    const res = await request(createApp(me())).get("/api/friends");
     expect(res.status).toBe(200);
     expect(res.body).toEqual([]);
   });
 
   it("returns friends list", async () => {
-    const app = createApp({ _id: userId, friends: [otherId] });
-    User.find.mockReturnValue({
-      lean: vi.fn().mockResolvedValue([
-        { _id: otherId, username: "friend1", displayName: "Friend One" },
-      ]),
-    });
-    const res = await request(app).get("/api/friends");
+    User.find.mockReturnValue(lean([{ _id: otherId, username: "other" }]));
+    const res = await request(createApp(me([otherId]))).get("/api/friends");
     expect(res.status).toBe(200);
     expect(res.body).toHaveLength(1);
-    expect(res.body[0].username).toBe("friend1");
+    expect(res.body[0].username).toBe("other");
   });
 });
 
-describe("POST /api/friends/add/:userId", () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it("returns 400 when adding yourself", async () => {
-    const app = createApp({ _id: userId });
-    const res = await request(app).post(`/api/friends/add/${userId}`);
+describe("POST /api/friends/request/:userId", () => {
+  it("rejects sending a request to yourself", async () => {
+    const res = await request(createApp(me())).post(`/api/friends/request/${userId}`);
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe("Cannot add yourself");
   });
 
-  it("returns 404 when target user not found", async () => {
-    const app = createApp({ _id: userId });
-    User.findById.mockImplementation((id) => {
-      if (String(id) === String(userId)) return { _id: userId, friends: { includes: () => false, push: vi.fn() }, save: vi.fn() };
-      return null;
-    });
-    const res = await request(app).post(`/api/friends/add/${otherId}`);
+  it("rejects an invalid id", async () => {
+    const res = await request(createApp(me())).post("/api/friends/request/not-an-id");
+    expect(res.status).toBe(400);
+  });
+
+  it("404s for an unknown user", async () => {
+    User.findById.mockReturnValue(lean(null));
+    const res = await request(createApp(me())).post(`/api/friends/request/${otherId}`);
     expect(res.status).toBe(404);
   });
 
-  it("succeeds when adding a valid friend", async () => {
-    const app = createApp({ _id: userId });
-    const meFriends = [];
-    const otherFriends = [];
-    User.findById.mockImplementation((id) => {
-      if (String(id) === String(userId)) {
-        return { _id: userId, friends: { includes: () => false, push: (id) => meFriends.push(id) }, save: vi.fn() };
-      }
-      return { _id: otherId, friends: { push: (id) => otherFriends.push(id) }, save: vi.fn() };
-    });
-    const res = await request(app).post(`/api/friends/add/${otherId}`);
+  it("creates a pending request and notifies the recipient, without befriending", async () => {
+    User.findById.mockReturnValue(lean({ _id: otherId, username: "other" }));
+    FriendRequest.findOneAndDelete.mockResolvedValue(null);
+    FriendRequest.create.mockResolvedValue({ _id: new mongoose.Types.ObjectId() });
+
+    const res = await request(createApp(me())).post(`/api/friends/request/${otherId}`);
+
     expect(res.status).toBe(200);
-    expect(res.body.ok).toBe(true);
+    expect(res.body.status).toBe("outgoing");
+    expect(FriendRequest.create).toHaveBeenCalledWith({ from: userId, to: String(otherId) });
+    expect(User.updateOne).not.toHaveBeenCalled();
+    expect(createNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: otherId, type: "friend_request" })
+    );
+    expect(emitToUsers).toHaveBeenCalled();
+  });
+
+  it("accepts instead when the other user already sent me a request", async () => {
+    User.findById.mockReturnValue(lean({ _id: otherId, username: "other" }));
+    FriendRequest.findOneAndDelete.mockResolvedValue({ from: otherId, to: userId });
+
+    const res = await request(createApp(me())).post(`/api/friends/request/${otherId}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("friends");
+    expect(FriendRequest.create).not.toHaveBeenCalled();
+    expect(User.updateOne).toHaveBeenCalledTimes(2);
+    expect(createNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: otherId, type: "friend_accept" })
+    );
+  });
+
+  it("is a no-op for an existing friend", async () => {
+    User.findById.mockReturnValue(lean({ _id: otherId, username: "other" }));
+    const res = await request(createApp(me([otherId]))).post(`/api/friends/request/${otherId}`);
+    expect(res.body.status).toBe("friends");
+    expect(FriendRequest.create).not.toHaveBeenCalled();
+  });
+
+  it("the old /add route only sends a request", async () => {
+    User.findById.mockReturnValue(lean({ _id: otherId, username: "other" }));
+    FriendRequest.findOneAndDelete.mockResolvedValue(null);
+    FriendRequest.create.mockResolvedValue({ _id: new mongoose.Types.ObjectId() });
+
+    const res = await request(createApp(me())).post(`/api/friends/add/${otherId}`);
+    expect(res.body.status).toBe("outgoing");
+    expect(User.updateOne).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/friends/requests/:id/accept", () => {
+  it("befriends both sides, notifies the sender and records activity", async () => {
+    FriendRequest.findOneAndDelete.mockResolvedValue({ from: otherId, to: userId });
+    User.findById.mockReturnValue(lean({ _id: otherId, username: "other" }));
+
+    const id = new mongoose.Types.ObjectId();
+    const res = await request(createApp(me())).post(`/api/friends/requests/${id}/accept`);
+
+    expect(res.status).toBe(200);
+    expect(FriendRequest.findOneAndDelete).toHaveBeenCalledWith({ _id: String(id), to: userId });
+    expect(User.updateOne).toHaveBeenCalledTimes(2);
+    expect(createNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: otherId, type: "friend_accept" })
+    );
+    expect(createActivity).toHaveBeenCalledTimes(2);
+  });
+
+  it("404s when the request isn't addressed to me", async () => {
+    FriendRequest.findOneAndDelete.mockResolvedValue(null);
+    const res = await request(createApp(me())).post(
+      `/api/friends/requests/${new mongoose.Types.ObjectId()}/accept`
+    );
+    expect(res.status).toBe(404);
+    expect(User.updateOne).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/friends/requests/:id/decline", () => {
+  it("removes the request without befriending", async () => {
+    FriendRequest.findOneAndDelete.mockResolvedValue({ from: otherId, to: userId });
+    const res = await request(createApp(me())).post(
+      `/api/friends/requests/${new mongoose.Types.ObjectId()}/decline`
+    );
+    expect(res.status).toBe(200);
+    expect(User.updateOne).not.toHaveBeenCalled();
+    expect(createNotification).not.toHaveBeenCalled();
+  });
+});
+
+describe("DELETE /api/friends/requests/:id (cancel)", () => {
+  it("only lets the sender cancel", async () => {
+    FriendRequest.findOneAndDelete.mockResolvedValue({ from: userId, to: otherId });
+    const id = new mongoose.Types.ObjectId();
+    const res = await request(createApp(me())).delete(`/api/friends/requests/${id}`);
+    expect(res.status).toBe(200);
+    expect(FriendRequest.findOneAndDelete).toHaveBeenCalledWith({ _id: String(id), from: userId });
   });
 });
 
 describe("DELETE /api/friends/remove/:userId", () => {
-  beforeEach(() => vi.clearAllMocks());
-
   it("returns 400 when removing yourself", async () => {
-    const app = createApp({ _id: userId });
-    const res = await request(app).delete(`/api/friends/remove/${userId}`);
+    const res = await request(createApp(me())).delete(`/api/friends/remove/${userId}`);
     expect(res.status).toBe(400);
   });
 
-  it("returns 404 when target user not found", async () => {
-    const app = createApp({ _id: userId });
-    User.findById.mockImplementation((id) => {
-      if (String(id) === String(userId)) return { _id: userId, friends: { pull: vi.fn() }, save: vi.fn() };
-      return null;
-    });
-    const res = await request(app).delete(`/api/friends/remove/${otherId}`);
+  it("returns 404 when user not found", async () => {
+    User.exists.mockResolvedValue(null);
+    const res = await request(createApp(me())).delete(`/api/friends/remove/${otherId}`);
     expect(res.status).toBe(404);
   });
 
-  it("removes friend successfully", async () => {
-    const app = createApp({ _id: userId });
-    const pullMe = vi.fn();
-    const pullOther = vi.fn();
-    User.findById.mockImplementation((id) => {
-      if (String(id) === String(userId)) return { _id: userId, friends: { pull: pullMe }, save: vi.fn() };
-      return { _id: otherId, friends: { pull: pullOther }, save: vi.fn() };
-    });
-    const res = await request(app).delete(`/api/friends/remove/${otherId}`);
+  it("removes the friendship on both sides", async () => {
+    User.exists.mockResolvedValue({ _id: otherId });
+    const res = await request(createApp(me([otherId]))).delete(`/api/friends/remove/${otherId}`);
     expect(res.status).toBe(200);
-    expect(res.body.ok).toBe(true);
-    expect(pullMe).toHaveBeenCalledWith(String(otherId));
-    expect(pullOther).toHaveBeenCalled();
+    expect(User.updateOne).toHaveBeenCalledWith({ _id: userId }, { $pull: { friends: String(otherId) } });
+    expect(User.updateOne).toHaveBeenCalledWith({ _id: String(otherId) }, { $pull: { friends: userId } });
   });
 });

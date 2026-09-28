@@ -1,6 +1,8 @@
 .section {
   width: 100%;
-  margin-bottom: 48px;
+  /* Sections sit tight together; the heading's own top margin below is
+     the only separation. */
+  margin-bottom: 0;
 }
 
 /* ── Hero ── */
@@ -77,62 +79,149 @@
 .sectionTitle {
   font-size: 20px;
   font-weight: 700;
-  margin-bottom: 18px;
+  margin: 16px 0 14px;
 }
 
 /* ── Carousel ── */
 
+/* Full-bleed strip: the row escapes the page's side padding so cards run to
+   the viewport edges instead of stopping short and being cut mid-card.
+   The title above stays put, so the row still starts flush with it via the
+   scroller's own padding below. */
+.rowWrap {
+  /* Width of the blur strip under the fixed left sidebar (the rail's
+     buttons end at ~56px; the ramp finishes just past them). Declared here,
+     not on .carousel: .edge is a sibling of the scroller, so a custom
+     property set on .carousel would never reach it. */
+  --edge-w: 72px;
+  /* Visible width of the closed notification rail; keep in step with
+     SidebarRight.module.css (.toggle width). */
+  --rail-w: 32px;
+  position: relative;
+  /* A page whose gutters differ left and right (the game page) sets
+     --page-pad-l / --page-pad-r; otherwise both are --page-pad. */
+  margin-left: calc(var(--page-pad-l, var(--page-pad, 0px)) * -1);
+  margin-right: calc(var(--page-pad-r, var(--page-pad, 0px)) * -1);
+}
+
 .carousel {
+  /* One variable drives card width for the whole row; GameCard reads it. */
+  --card-w: 320px;
   display: flex;
-  gap: 18px;
+  gap: 0;
   overflow-x: auto;
   scrollbar-width: none;
-  padding-bottom: 4px;
+  /* Buffers: at rest the first card lines up with the section title (the
+     page gutter), or clears the sidebar blur if the gutter is narrower, as
+     on mobile. At full scroll the last card ends flush against the closed
+     notification rail (SidebarRight's 32px toggle strip). The rail is fixed
+     to the viewport edge and overlaps the page scrollbar, while this row
+     stops at the scrollbar, so subtract the scrollbar's width:
+     100vw - 100% is exactly that (100% here is the row's width).
+     --edge-w and --rail-w are inherited from .rowWrap. No vertical padding:
+     the card hover no longer lifts or glows outside its box. */
+  padding: 0 max(0px, calc(var(--rail-w, 32px) - (100vw - 100%))) 0
+    max(var(--page-pad-l, var(--page-pad, 0px)), var(--edge-w, 72px));
   will-change: scroll-position;
-  margin-bottom: 10px;
+  /* Deliberately no scroll snapping: the row is driven by useCarouselScroll,
+     which nudges scrollLeft a few px per frame while the cursor sits near an
+     edge. Snapping cancels those increments by yanking scrollLeft back to the
+     nearest card boundary, which stopped the hover-scroll dead. */
+}
+
+/* While one card is hovered or focused, dim the rest of the row so it reads as
+   the selected one. The filter goes on each card's children (the art box and
+   the title block), not just the <img>, so the tags on the art and the game
+   name under it darken too. Structural selectors rather than GameCard's module
+   classes, which aren't reachable from this stylesheet; the transitions live
+   on GameCard's .art and .body. */
+.carousel:has(> :hover) > :not(:hover) > *,
+.carousel:has(> :focus-visible) > :not(:focus-visible) > * {
+  filter: brightness(0.55) saturate(0.75);
+}
+
+/* Left edge only: a progressive blur under the fixed sidebar, so cards
+   scrolling past it soften instead of colliding with its buttons. No tint,
+   and nothing on the right. Built from four stacked layers of increasing
+   radius, each masked to reach less far inward; the cumulative effect ramps
+   smoothly from sharp to fully blurred. One layer cannot do this: masking
+   only fades that layer's opacity, so a half-transparent full-radius blur
+   composites over the sharp original and reads as a double image. */
+.edge {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: var(--edge-w, 72px);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.edge > span {
+  position: absolute;
+  inset: 0;
+  /* Second mask: fade the blur out down the card's title band so it doesn't
+     stop in a hard line at the bottom of the row. Intersected with each
+     layer's horizontal mask below. Masks go on the layers, not on .edge: a
+     mask on the parent would make it the backdrop root and the layers would
+     have nothing to blur. */
+  --fade-y: linear-gradient(to bottom, #000 calc(100% - 56px), transparent);
+  mask-composite: intersect;
+  -webkit-mask-composite: source-in;
+}
+
+.blur1 {
+  backdrop-filter: blur(1px);
+  -webkit-backdrop-filter: blur(1px);
+  mask-image: linear-gradient(to right, #000 0%, #000 80%, transparent 100%), var(--fade-y);
+  -webkit-mask-image: linear-gradient(to right, #000 0%, #000 80%, transparent 100%), var(--fade-y);
+}
+
+.blur2 {
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  mask-image: linear-gradient(to right, #000 0%, #000 65%, transparent 92%), var(--fade-y);
+  -webkit-mask-image: linear-gradient(to right, #000 0%, #000 65%, transparent 92%), var(--fade-y);
+}
+
+.blur3 {
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  mask-image: linear-gradient(to right, #000 0%, #000 50%, transparent 82%), var(--fade-y);
+  -webkit-mask-image: linear-gradient(to right, #000 0%, #000 50%, transparent 82%), var(--fade-y);
+}
+
+.blur4 {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  mask-image: linear-gradient(to right, #000 0%, #000 35%, transparent 70%), var(--fade-y);
+  -webkit-mask-image: linear-gradient(to right, #000 0%, #000 35%, transparent 70%), var(--fade-y);
+}
+
+/* The lighter left edge (edge="fade"): the cards fade out under the
+   sidebar through a mask on the row itself. Nothing samples the page
+   behind, so it can't lag a frame behind a scroll and ghost the way
+   stacked backdrop blurs can when several rows sit close together. */
+.carouselFade {
+  mask-image: linear-gradient(to right, transparent 0, #000 var(--edge-w, 72px));
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 var(--edge-w, 72px));
+}
+
+@media (max-width: 1280px) {
+  .carousel { --card-w: 286px; }
+}
+
+@media (max-width: 768px) {
+  .carousel { --card-w: 244px; }
+  /* Layout hides the notification rail at this width. */
+  .rowWrap { --rail-w: 0px; }
 }
 
 .carousel::-webkit-scrollbar {
   display: none;
 }
 
-/* ── Tiles ── */
-
-.tile {
-  min-width: 220px;
-  max-width: 220px;
-  border-radius: 18px;
-  overflow: hidden;
-  cursor: pointer;
-  flex-shrink: 0;
-  background: rgba(15, 23, 42, 0.6);
-  backdrop-filter: blur(16px);
-  border: 1px solid rgba(148, 163, 184, 0.15);
-}
-
-.thumb {
-  height: 140px;
-  background: #020617;
-}
-
-.thumb img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.meta {
-  padding: 16px;
-}
-
-.title {
-  font-size: 15px;
-  font-weight: 600;
-}
-
-.sub {
-  font-size: 13px;
-}
+/* Card visuals now live in GameCard.module.css. */
 
 .muted {
   color: #9ca3af;

@@ -1,185 +1,290 @@
-.authContainer {
+/* The sign-in page (LoginPage.jsx), in the Library hero's language: the
+   homepage's featured games as a tilted wall of art filling the page,
+   fading away diagonally (bottom left to top right) into the dark, and the
+   form sitting straight in that dark (no card around it), in one fixed warm
+   accent. No blur (Chrome ghosting). */
+
+.auth {
+  --accent: #d4956e;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   min-height: 100vh;
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: var(--space-6);
-  background: var(--color-bg-primary);
+  color: #e6edf3;
+  background: #07090d;
 }
 
-.authCard {
+/* the art wall: five columns of covers, tilted away in 3D, each scrolling
+   slowly and endlessly like a carousel, alternately up and down at slightly
+   different speeds */
+.wall {
+  position: absolute;
+  z-index: -2;
+  top: -18%;
+  bottom: -18%;
+  left: 22%;
+  right: -14%;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  align-items: start;
+  gap: 16px;
+  transform: perspective(1600px) rotateY(-18deg) rotateX(8deg) rotateZ(-6deg);
+  transform-origin: left center;
+  pointer-events: none;
+  animation: wallIn 1.4s ease-out both;
+}
+/* a column's covers twice over; moving it up by half brings the second copy
+   exactly where the first began, so the loop has no seam (each cover's own
+   bottom margin, not a flex gap, keeps the halves exactly equal) */
+.track {
+  animation: scrollUp var(--dur, 90s) linear infinite;
+  will-change: transform;
+}
+.col:nth-child(even) .track { animation-direction: reverse; }
+/* columns start out of step with each other */
+.col:nth-child(2) { margin-top: -60px; }
+.col:nth-child(3) { margin-top: -140px; }
+.col:nth-child(4) { margin-top: -30px; }
+.col:nth-child(5) { margin-top: -110px; }
+.track img {
+  display: block;
   width: 100%;
-  max-width: 420px;
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border-primary);
-  border-radius: var(--radius-2xl);
-  padding: var(--space-8);
-  box-shadow: var(--shadow-xl);
-  backdrop-filter: blur(20px);
+  aspect-ratio: 16 / 9;
+  margin-bottom: 16px;
+  object-fit: cover;
+  border-radius: 14px;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 16px 34px rgba(0, 0, 0, 0.55);
+}
+@keyframes wallIn { from { opacity: 0; } }
+@keyframes scrollUp { to { transform: translateY(-50%); } }
+@media (prefers-reduced-motion: reduce) {
+  .wall, .track { animation: none; }
 }
 
-.authCard h2 {
-  font-size: var(--text-3xl);
-  font-weight: var(--weight-bold);
-  margin: 0 0 var(--space-8) 0;
-  text-align: center;
-  color: var(--color-text-primary);
+/* the dark the art fades into, diagonally, and the accent glowing up from
+   behind the form */
+.shade {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background:
+    radial-gradient(55% 70% at 8% 60%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 70%),
+    linear-gradient(60deg, #07090d 0%, #07090d 34%, rgba(7, 9, 13, 0.9) 46%, rgba(7, 9, 13, 0.5) 62%, rgba(7, 9, 13, 0.18) 80%, rgba(7, 9, 13, 0.05) 100%),
+    linear-gradient(0deg, rgba(7, 9, 13, 0.7) 0%, transparent 30%);
+  pointer-events: none;
 }
 
-.authCard form {
+/* the form, in the fade, clear of the sidebar */
+.panel {
+  position: relative;
+  box-sizing: border-box;
+  width: min(400px, calc(100vw - 32px));
+  margin-left: clamp(128px, 15vw, 300px);
+  padding: 56px 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: 18px;
 }
-
-.authCard input {
-  width: 100%;
-  padding: var(--space-3) var(--space-4);
-  background: var(--color-bg-secondary);
-  border: 1px solid var(--color-border-primary);
-  border-radius: var(--radius-md);
-  color: var(--color-text-primary);
-  font-size: var(--text-base);
-  transition: all var(--transition-base);
+/* the art's colour as a glowing edge, like the Library hero's */
+.panel::before {
+  content: "";
+  position: absolute;
+  left: -30px;
+  top: 64px;
+  height: 92px;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--accent);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 75%, transparent);
 }
-
-.authCard input:focus {
-  border-color: var(--color-border-focus);
-  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.1);
+.head { margin-bottom: 6px; }
+.title {
+  margin: 0;
+  font-size: clamp(38px, 3.4vw, 50px);
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.015em;
+  color: #f0f6fc;
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.6);
 }
-
-.authCard input::placeholder {
-  color: var(--color-text-muted);
-}
-
-.authCard button[type="submit"] {
-  width: 100%;
-  padding: var(--space-3) var(--space-5);
-  background: var(--color-accent-primary);
-  border: none;
-  border-radius: var(--radius-md);
-  color: white;
-  font-size: var(--text-base);
-  font-weight: var(--weight-semibold);
+.sub { margin: 10px 0 0; font-size: 14.5px; line-height: 1.5; color: #8b949e; }
+.sub b { color: #e6edf3; font-weight: 600; }
+/* ← Back, above the heading on the code and forgot steps */
+.back {
+  all: unset;
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: -6px;
+  padding: 6px 12px 6px 9px;
+  border-radius: 999px;
   cursor: pointer;
-  transition: all var(--transition-base);
-  margin-top: var(--space-2);
+  font-size: 13px;
+  font-weight: 600;
+  color: #8b949e;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: color 0.15s ease, border-color 0.15s ease;
 }
+.back:hover { color: #f0f6fc; border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+.back:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.checking { margin: 0; font-size: 15px; color: #8b949e; }
 
-.authCard button[type="submit"]:hover:not(:disabled) {
-  background: var(--color-accent-primary-hover);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(96, 165, 250, 0.3);
+.form { display: flex; flex-direction: column; gap: 12px; }
+.row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+.input,
+.input:focus {
+  box-sizing: border-box;
+  width: 100%;
+  height: 48px;
+  margin: 0;
+  padding: 0 16px;
+  border-radius: 12px;
+  font: inherit;
+  font-size: 14.5px;
+  color: #e6edf3;
+  background: rgba(5, 7, 10, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: none;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
-
-.authCard button[type="submit"]:active:not(:disabled) {
-  transform: translateY(0);
-}
-
-.authCard button[type="submit"]:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-  transform: none;
-}
-
-.authCard button[type="submit"]:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: 2px;
-}
-
-.toggleText {
+.input::placeholder { color: #6e7681; }
+/* the 6-digit code: big, spaced, centred */
+.code,
+.code:focus { height: 56px; text-align: center; font-size: 22px; font-weight: 700; letter-spacing: 0.4em; font-variant-numeric: tabular-nums; }
+.code::placeholder { font-size: 14.5px; font-weight: 400; letter-spacing: 0; }
+.hint { margin: 6px 2px 0; font-size: 12px; color: #6e7681; }
+.codeFoot { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; font-size: 12.5px; color: #8b949e; }
+/* an inline text button (resend, sign in instead) */
+.link {
+  all: unset;
   cursor: pointer;
-  margin-top: var(--space-4);
-  text-align: center;
-  font-size: var(--text-sm);
-  color: var(--color-accent-primary);
-  transition: color var(--transition-base);
+  font-weight: 700;
+  color: color-mix(in srgb, var(--accent) 80%, #ffffff);
+}
+.link:hover:not(:disabled) { text-decoration: underline; text-underline-offset: 3px; }
+.link:disabled { cursor: default; color: #6e7681; font-weight: 600; }
+.link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.error .link { display: block; margin-top: 6px; }
+.input:hover { border-color: rgba(255, 255, 255, 0.16); }
+.input:focus {
+  background: rgba(5, 7, 10, 0.88);
+  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+/* the browser's autofill paints its own background; keep ours */
+.input:-webkit-autofill {
+  -webkit-text-fill-color: #e6edf3;
+  box-shadow: 0 0 0 100px #0a0d13 inset;
+  caret-color: #e6edf3;
 }
 
-.toggleText:hover {
-  color: var(--color-accent-primary-hover);
-  text-decoration: underline;
+.forgot {
+  all: unset;
+  align-self: flex-end;
+  margin: -4px 2px 0;
+  cursor: pointer;
+  font-size: 12.5px;
+  color: #8b949e;
+  transition: color 0.15s ease;
 }
+.forgot:hover { color: var(--accent); }
+.forgot:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 
-.successText {
-  margin-top: var(--space-4);
-  padding: var(--space-3) var(--space-4);
-  background: var(--color-success-bg);
-  border: 1px solid rgba(46, 160, 67, 0.3);
-  border-radius: var(--radius-md);
-  color: var(--color-success);
-  font-size: var(--text-sm);
+.primary {
+  all: unset;
+  box-sizing: border-box;
+  height: 48px;
+  margin-top: 4px;
   text-align: center;
-  line-height: var(--leading-relaxed);
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 14.5px;
+  font-weight: 800;
+  color: #07090d;
+  background: var(--accent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 0 24px color-mix(in srgb, var(--accent) 32%, transparent);
+  transition: box-shadow 0.2s ease, filter 0.2s ease;
 }
+.primary:hover:not(:disabled) {
+  filter: brightness(1.06);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 0 34px color-mix(in srgb, var(--accent) 50%, transparent);
+}
+.primary:focus-visible { outline: 2px solid #f0f6fc; outline-offset: 3px; }
+.primary:disabled { opacity: 0.55; cursor: default; }
 
-.errorText {
-  margin-top: var(--space-4);
-  padding: var(--space-3) var(--space-4);
-  background: var(--color-error-bg);
-  border: 1px solid rgba(248, 81, 73, 0.3);
-  border-radius: var(--radius-md);
-  color: var(--color-error);
-  font-size: var(--text-sm);
-  text-align: center;
-  line-height: var(--leading-relaxed);
-}
+.success { margin: 0; font-size: 13px; color: #7ee787; }
+.error { margin: 0; font-size: 13px; color: #ff7b72; }
+.retry { display: block; margin-top: 4px; font-weight: 600; }
 
 .divider {
   display: flex;
   align-items: center;
-  margin: var(--space-6) 0;
-  text-align: center;
-}
-
-.divider::before,
-.divider::after {
-  content: "";
-  flex: 1;
-  height: 1px;
-  background: var(--color-border-primary);
-}
-
-.divider span {
-  padding: 0 var(--space-4);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-semibold);
-  color: var(--color-text-tertiary);
+  gap: 12px;
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  color: #6e7681;
 }
+.divider::before,
+.divider::after { content: ""; flex: 1; height: 1px; background: rgba(255, 255, 255, 0.08); }
 
-.socialButtons {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.socialButtons button {
-  width: 100%;
-  padding: var(--space-3) var(--space-5);
-  background: var(--color-bg-secondary);
-  border: 1px solid var(--color-border-primary);
-  border-radius: var(--radius-md);
-  color: var(--color-text-primary);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-medium);
+.social { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.social button {
+  all: unset;
+  box-sizing: border-box;
+  height: 42px;
+  text-align: center;
+  border-radius: 12px;
   cursor: pointer;
-  transition: all var(--transition-base);
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+  color: #c9d1d9;
+  background: rgba(5, 7, 10, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+.social button:hover {
+  color: #f0f6fc;
+  background: rgba(255, 255, 255, 0.06);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.social button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.social button:disabled,
+.social button:disabled:hover { cursor: not-allowed; color: #6e7681; background: rgba(5, 7, 10, 0.4); border-color: rgba(255, 255, 255, 0.06); }
+.soon {
+  margin-left: 4px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #8b949e;
+  background: rgba(255, 255, 255, 0.06);
 }
 
-.socialButtons button:hover {
-  background: var(--color-bg-tertiary);
-  border-color: var(--color-border-focus);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
+.switch { margin: 2px 0 0; font-size: 13.5px; color: #8b949e; }
+.dot { margin: 0 8px; color: #484f58; }
+.switch button {
+  all: unset;
+  cursor: pointer;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--accent) 80%, #ffffff);
 }
+.switch button:hover { text-decoration: underline; text-underline-offset: 3px; }
+.switch button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 
-.socialButtons button:active {
-  transform: translateY(0);
-}
-
-.socialButtons button:focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: 2px;
+@media (max-width: 900px) {
+  .wall { left: -10%; right: -40%; opacity: 0.45; }
+  .panel { margin: 0 auto; }
+  .panel::before { display: none; }
 }

@@ -1,0 +1,625 @@
+.section {
+  width: 100%;
+  /* Sections sit tight together; the heading's own top margin below is
+     the only separation. */
+  margin-bottom: 0;
+}
+
+/* Matches the other homepage section headings (GameCarousel.module.css). */
+.sectionTitle {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 16px 0 14px;
+}
+
+/* The heading as a panel label (the game page, labelHeading): uppercase,
+   the game's colour as a glowing edge on the left like its panels, and a
+   count, on the page's left edge like the panels above. */
+.sectionLabel {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0 16px;
+  padding-left: 14px;
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--tint, #d4956e) 70%, #ffffff);
+}
+.sectionLabel::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 3px;
+  height: 16px;
+  margin-top: -8px;
+  border-radius: 3px;
+  background: var(--tint, #d4956e);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--tint, #d4956e) 70%, transparent);
+}
+.sectionCount {
+  min-width: 20px;
+  padding: 1px 8px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  /* in the game's colour, like the label */
+  color: color-mix(in srgb, var(--tint, #d4956e) 80%, #ffffff);
+  background: color-mix(in srgb, var(--tint, #d4956e) 14%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--tint, #d4956e) 35%, transparent) inset;
+}
+
+/* [left Joy-Con | panel | right Joy-Con], all the panel's height.
+
+   Clearance for the fixed side navigation, measured from the layout:
+   - the left sidebar's icons end 56px from the viewport edge -> 72px keeps a
+     16px gap;
+   - the notification bar, when closed, leaves a 32px tab on the right edge
+     (SidebarRight: width 252px at right -220px) -> 48px keeps a 16px gap even
+     with overlay scrollbars.
+   The stage only adds margin beyond the page's own gutter (--page-pad), so on
+   desktop, where the gutter is already 75px, nothing changes; on narrow
+   screens it pulls the controls clear of the icons. */
+.stage {
+  --nav-clear-left: 72px;
+  --nav-clear-right: 48px;
+  --joy-w: 58px;
+  /* A size container, so the panel can derive its height from the stage's
+     width (cqw units) instead of from its content. */
+  container-type: inline-size;
+  display: grid;
+  grid-template-columns: var(--joy-w) minmax(0, 1fr) var(--joy-w);
+  /* Row 1: Joy-Cons + panel. Row 2: the pager, in the panel's column only. */
+  grid-template-rows: auto auto;
+  margin-left: max(0px, calc(var(--nav-clear-left) - var(--page-pad, 0px)));
+  margin-right: max(0px, calc(var(--nav-clear-right) - var(--page-pad, 0px)));
+}
+
+/* ───────── PANEL ───────── */
+.panel {
+  position: relative;
+  /* Every stage item is placed explicitly. Giving only a row lets grid
+     auto-placement drop the panel into the first free cell ahead of the
+     Joy-Cons. */
+  grid-column: 2;
+  grid-row: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+  /* Fixed height, independent of which game is showing: computed from the
+     stage width rather than the content, so a long title can't stretch it.
+     Width / 2.925 makes the art column exactly 16:9, since
+     (2.55 / 1.55) * (16 / 9) = 2.925. The 420px floor keeps the details
+     column readable on narrower desktops; the art then crops to fill.
+     (Not aspect-ratio + min-height: that pair transfers the minimum height
+     into a minimum WIDTH of 420 * 2.925 = 1229px, which overflowed the
+     column at 1280px wide.) */
+  height: max(420px, calc((100cqw - 2 * var(--joy-w)) / 2.925));
+  overflow: hidden;
+  background: rgba(8, 11, 18, 0.72);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+  touch-action: pan-y;
+  isolation: isolate;
+}
+
+/* The slide's own art, blurred into a colour wash behind the details column,
+   so each game tints its panel the way a game page's header would. */
+.ambient {
+  position: absolute;
+  top: -40px;
+  left: -40px;
+  width: calc(100% + 80px);
+  height: calc(100% + 80px);
+  z-index: -1;
+  object-fit: cover;
+  filter: blur(48px) saturate(1.3);
+  opacity: 0.32;
+  pointer-events: none;
+}
+
+.skeleton {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  /* Height comes from .panel; this only covers the stacked layout, where the
+     panel's height is otherwise content-driven and the skeleton has none. */
+  min-height: 420px;
+  background:
+    linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.05) 50%, transparent 70%) 0 0 / 200% 100%,
+    rgba(8, 11, 18, 0.72);
+  animation: shimmer 1.6s linear infinite;
+}
+
+@keyframes shimmer {
+  to { background-position: -200% 0; }
+}
+
+/* ───────── ART ───────── */
+.art {
+  position: relative;
+  /* Fills the panel's full height (the grid stretches it); the image is
+     absolutely positioned with object-fit: cover, so there is never an empty
+     band under it, whatever the source art's ratio. */
+  min-height: 0;
+  padding: 0;
+  border: none;
+  /* It's a <button>, and the global button style rounds the corners. */
+  border-radius: 0;
+  background: #0b0f16;
+  overflow: hidden;
+  cursor: pointer;
+  animation: slideIn 0.5s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+
+.art img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.8s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+.art:hover img {
+  transform: scale(1.03);
+}
+
+/* Soft seam into the details column instead of a hard image edge. */
+.art::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(to right, transparent 72%, rgba(8, 11, 18, 0.85) 100%);
+}
+
+/* ───────── DETAILS ───────── */
+.details {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  padding: 30px 34px;
+  animation: slideIn 0.5s cubic-bezier(0.2, 0.7, 0.3, 1) 0.06s both;
+}
+
+/* Enters from the side the user navigated toward (--dir is +1 or -1). */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(calc(var(--dir, 1) * 28px));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Rank and "Trending on Steam" share one style: small, semibold, muted. */
+.kicker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+/* No box: the rank is one quiet muted figure ("#9", "#" and number in the
+   same style), set off from the kicker text by a hairline. */
+.rank {
+  display: inline-flex;
+  align-items: baseline;
+  padding-right: 12px;
+  border-right: 1px solid rgba(255, 255, 255, 0.2);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  line-height: 1;
+}
+
+.title {
+  margin: 0;
+  font-size: clamp(22px, 2.1vw, 32px);
+  font-weight: var(--weight-bold);
+  /* Tall enough for descenders (the g in "Legends"): at 1.15 the glyphs
+     spilled past the line box, which clipped them and also made every
+     one-line title count as scrollable. */
+  line-height: 1.3;
+  color: var(--color-text-primary);
+  /* One line visible; longer names scroll, with the same hover-only
+     scrollbar (ScrollRail) as the description. */
+  max-height: 1.3em;
+  padding-right: 16px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+
+.title:focus-visible {
+  outline: none;
+}
+
+.byline {
+  margin-top: -6px;
+  font-size: var(--text-sm);
+  color: var(--color-text-tertiary);
+}
+
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 2px 0 0;
+}
+
+/* Same dark-glass language as the card tags, scaled up. */
+.stat {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 2px;
+  padding: 8px 12px;
+  border-radius: var(--radius-md, 8px);
+  background: rgba(5, 7, 12, 0.55);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+}
+
+.stat dt {
+  font-size: 11px;
+  font-weight: var(--weight-medium);
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+}
+
+.stat dd {
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  color: var(--color-text-primary);
+}
+
+.unit {
+  margin-left: 1px;
+  font-size: 0.7em;
+}
+
+.summary {
+  /* The one flexible piece of the column: it takes whatever height is left
+     after the fixed parts, so the panel height never has to change. Longer
+     text scrolls inside it; the scrollbar thumb stays invisible until the
+     text is hovered. The bottom fade hints there is more, and the matching
+     bottom padding lets the last line scroll clear of it. */
+  flex: 1 1 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0 16px 1.6em 0;
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  color: var(--color-text-secondary);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 1.6em), transparent);
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 1.6em), transparent);
+}
+
+
+
+.summary:focus-visible {
+  outline: none;
+}
+
+/* The title and description scroll with the game page's scrollbar
+   (ScrollRail: a slim glass pill in --accent), shown only while that box is
+   hovered or focused, or its thumb dragged. The game's colour on the game
+   page (--tint), the warm accent on the homepage. */
+.scrollBox {
+  position: relative;
+  flex-shrink: 0;
+  min-width: 0;
+  --accent: var(--tint, #d4956e);
+}
+/* the description takes whatever height the column has left */
+.summaryBox { flex: 1 1 0; min-height: 0; display: flex; }
+.summaryBox > .summary { height: 100%; }
+.boxRail { opacity: 0; transition: opacity 0.2s ease; }
+.scrollBox:hover .boxRail,
+.scrollBox:focus-within .boxRail,
+.boxRail:active { opacity: 1; }
+
+/* Pinned to the bottom of the column however long the text above is. */
+.footer {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.tags {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Identical to the card's year/genre tag. */
+.tag {
+  padding: 3px 7px;
+  border-radius: var(--radius-md, 8px);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  line-height: 1.3;
+  color: var(--color-text-primary);
+  background: rgba(5, 7, 12, 0.55);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.14) inset;
+}
+
+.platforms {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 0 8px;
+  padding: 0;
+  list-style: none;
+  color: rgba(241, 245, 249, 0.82);
+}
+
+.platforms li {
+  display: flex;
+}
+
+.cta {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border: none;
+  border-radius: var(--radius-md, 8px);
+  /* the game's colour on the game page (--tint), near-white on the homepage */
+  background: var(--tint, #f8fafc);
+  color: #05070c;
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  cursor: pointer;
+  transition: background 0.2s ease, box-shadow 0.2s ease, gap 0.2s ease;
+}
+
+.cta:hover {
+  background: color-mix(in srgb, var(--tint, #ffffff) 82%, #ffffff);
+  box-shadow: 0 6px 22px color-mix(in srgb, var(--tint, #ffffff) 22%, transparent);
+  gap: 11px;
+}
+
+.cta:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 3px;
+}
+
+/* ───────── JOY-CONS ───────── */
+/* Rounded on the outer end, flush against the panel on the inner edge, like
+   a Joy-Con on the side of a Switch. Same base as the notification tab (dark
+   slate, #c7d2fe glyph), each tinted toward one end of the page aurora. */
+/* --joy-c: each side's tint. The homepage's aurora ends (cyan, violet); on
+   the game page both are the game's colour (--tint), glyph included. */
+.joy {
+  position: relative;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: none;
+  color: var(--tint, #c7d2fe);
+  cursor: pointer;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.08) inset,
+    0 10px 30px -12px rgba(0, 0, 0, 0.7);
+  transition: background 0.25s ease, box-shadow 0.25s ease;
+}
+
+.joyPrev {
+  --joy-c: var(--tint, rgb(34, 211, 238));
+  grid-column: 1;
+  grid-row: 1;
+  border-radius: 30px 0 0 30px;
+  background:
+    linear-gradient(to right, color-mix(in srgb, var(--joy-c) 14%, transparent), transparent 80%),
+    rgba(15, 23, 42, 0.95);
+}
+
+.joyNext {
+  --joy-c: var(--tint, rgb(167, 139, 250));
+  grid-column: 3;
+  grid-row: 1;
+  border-radius: 0 30px 30px 0;
+  background:
+    linear-gradient(to left, color-mix(in srgb, var(--joy-c) 16%, transparent), transparent 80%),
+    rgba(15, 23, 42, 0.95);
+}
+
+.joy:hover {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--tint, #c7d2fe) 28%, transparent) inset,
+    0 10px 30px -12px rgba(0, 0, 0, 0.7);
+}
+
+.joyPrev:hover {
+  background:
+    linear-gradient(to right, color-mix(in srgb, var(--joy-c) 24%, transparent), transparent 85%),
+    rgba(20, 30, 50, 0.97);
+}
+
+.joyNext:hover {
+  background:
+    linear-gradient(to left, color-mix(in srgb, var(--joy-c) 26%, transparent), transparent 85%),
+    rgba(20, 30, 50, 0.97);
+}
+
+/* The game page (tintedJoyCons): dark Joy-Cons, each with the game's colour
+   as a full-height glowing bar along the edge that faces the panel, like
+   the glowing edges on the page's panels. Hover brightens the bar and warms the
+   Joy-Con a little. The sticks inside stay as they are. */
+.stageTinted .joyPrev,
+.stageTinted .joyNext {
+  background: rgba(15, 23, 42, 0.95);
+}
+.stageTinted .joyPrev:hover,
+.stageTinted .joyNext:hover {
+  background: color-mix(in srgb, var(--tint, #d4956e) 10%, rgba(15, 23, 42, 0.97));
+}
+.stageTinted .joy::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--tint, #d4956e);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--tint, #d4956e) 70%, transparent);
+  transition: box-shadow 0.25s ease, width 0.25s ease;
+  pointer-events: none;
+}
+.stageTinted .joyPrev::after { right: 0; }
+.stageTinted .joyNext::after { left: 0; }
+.stageTinted .joy:hover::after {
+  width: 4px;
+  box-shadow: 0 0 18px var(--tint, #d4956e);
+}
+
+/* The analog stick: a recessed disc holding the notification tab's glyph. */
+.stick {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 38%, #1c2740, #0a0f1a 72%);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.1) inset,
+    0 3px 6px rgba(0, 0, 0, 0.55) inset,
+    0 1px 0 rgba(255, 255, 255, 0.05);
+  font-size: 15px;
+  line-height: 1;
+  user-select: none;
+  transition: transform 0.18s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+/* Hovering "pushes" the stick toward its direction; pressing clicks it in. */
+.joyPrev:hover .stick { transform: translateX(-3px); }
+.joyNext:hover .stick { transform: translateX(3px); }
+.joyPrev:active .stick { transform: translateX(-3px) scale(0.92); }
+.joyNext:active .stick { transform: translateX(3px) scale(0.92); }
+
+.joy:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: -4px;
+}
+
+/* ───────── PAGER ───────── */
+/* Spans exactly the panel's width (grid column 2 of the stage); each segment
+   gets an equal share. */
+.pager {
+  grid-column: 2;
+  grid-row: 2;
+  display: flex;
+  gap: 6px;
+  /* Breathing room on both sides, so the dashes sit clear of the panel
+     above and of the next section below. */
+  margin: 22px 0 26px;
+}
+
+.dash {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 4px;
+  padding: 0;
+  border: none;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.16);
+  cursor: pointer;
+  transition: background 0.3s ease, flex-grow 0.35s ease;
+}
+
+.dash:hover {
+  background: rgba(255, 255, 255, 0.36);
+}
+
+.dashActive,
+.dashActive:hover {
+  flex-grow: 4;
+  /* the game's colour on the game page (--tint), the warm accent on the homepage */
+  background: var(--tint, #d4956e);
+}
+
+.dash:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 3px;
+}
+
+/* ───────── RESPONSIVE ───────── */
+@media (max-width: 1024px) {
+  /* Stacked: art on top at a true 16:9, details below at a fixed height, so
+     the panel is still the same height for every game. */
+  .panel {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+
+  .art {
+    aspect-ratio: 16 / 9;
+  }
+
+  .art::after {
+    background: linear-gradient(to bottom, transparent 70%, rgba(8, 11, 18, 0.85) 100%);
+  }
+
+  .details {
+    height: 340px;
+    padding: 22px 22px 24px;
+  }
+}
+
+@media (max-width: 768px) {
+  .stage {
+    --joy-w: 40px;
+    /* The notification bar is hidden below 768px (Layout.module.css). */
+    --nav-clear-right: 0px;
+  }
+
+  .joyPrev { border-radius: 20px 0 0 20px; }
+  .joyNext { border-radius: 0 20px 20px 0; }
+
+  .stick {
+    width: 30px;
+    height: 30px;
+  }
+
+  .details {
+    height: 380px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .art,
+  .details {
+    animation: none;
+  }
+
+  .art img,
+  .dash,
+  .cta,
+  .skeleton,
+  .joy,
+  .stick {
+    transition: none;
+    animation: none;
+  }
+}

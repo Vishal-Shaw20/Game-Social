@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { X } from "lucide-react";
 import CommentItem from "./CommentItem";
 import MentionInput from "../MentionInput";
 import styles from "./ReviewComments.module.css";
@@ -32,12 +33,21 @@ function updateCommentRecursive(list, id, body) {
   });
 }
 
+// The list is flat (buildTree nests it for display); a deleted comment's
+// replies go too, as they do on the server.
 function deleteCommentRecursive(list, id) {
-  return list
-    .filter(c => String(c._id) !== String(id))
-    .map(c =>
-      c.replies ? { ...c, replies: deleteCommentRecursive(c.replies, id) } : c
-    );
+  const gone = new Set([String(id)]);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const c of list) {
+      if (c.parentId && gone.has(String(c.parentId)) && !gone.has(String(c._id))) {
+        gone.add(String(c._id));
+        grew = true;
+      }
+    }
+  }
+  return list.filter(c => !gone.has(String(c._id)));
 }
 
 function buildTree(comments) {
@@ -59,7 +69,7 @@ function buildTree(comments) {
   return roots;
 }
 
-export default function ReviewComments({ reviewId, currentUserId }) {
+export default function ReviewComments({ reviewId, currentUserId, onCountChange }) {
   const [comments, setComments] = useState([]);
   const [text, setText] = useState("");
   const [replyTo, setReplyTo] = useState(null);
@@ -68,6 +78,12 @@ export default function ReviewComments({ reviewId, currentUserId }) {
   const [editingId, setEditingId] = useState(null);
   const [editText, setEditText] = useState("");
   const [error, setError] = useState(null);
+
+  // Lets the review card keep its comment count in step.
+  useEffect(() => {
+    onCountChange?.(comments.length);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- report changes in count only
+  }, [comments.length]);
 
   useEffect(() => {
     fetch(`${import.meta.env.VITE_API_URL}/api/reviews/${reviewId}/comments`, { credentials: "include" })
@@ -177,45 +193,70 @@ export default function ReviewComments({ reviewId, currentUserId }) {
   }
 
   const tree = buildTree(comments);
+  const replyingTo = replyTo ? comments.find(c => String(c._id) === String(replyTo)) : null;
+  const replyName = replyingTo?.userId?.displayName || replyingTo?.userId?.username || "comment";
 
   return (
-    <div className={styles.reviewComments}>
-      {error && (
-        <p style={{ color: "#f85149", fontSize: "13px", margin: "0 0 12px" }}>{error}</p>
-      )}
+    <div className={styles.thread}>
+      {error && <p className={styles.error}>{error}</p>}
+
+      {tree.length === 0 && <p className={styles.empty}>No comments yet.</p>}
       {tree.map(c => (
         <CommentItem
           key={c._id}
           comment={c}
           onReply={setReplyTo}
           onToggleLike={toggleLike}
+          // The lit pencil again cancels the edit.
           onEdit={(comment) => {
+            if (comment._id === editingId) return setEditingId(null);
             setEditingId(comment._id);
             setEditText(comment.body);
           }}
           onDelete={deleteComment}
           currentUserId={currentUserId}
+          editingId={editingId}
         />
       ))}
 
-      {editingId && (
-        <>
-          <MentionInput value={editText} onChange={setEditText} rows={3} />
-          <button onClick={submitEdit}>Update</button>
-          <button className={styles.cancelBtn} onClick={() => setEditingId(null)}>Cancel</button>
-        </>
+      {/* One writing box, dark like the dock's: editing a comment, replying,
+          or a new comment. */}
+      {currentUserId && (
+        <div className={styles.box}>
+          {editingId ? (
+            <>
+              <MentionInput value={editText} onChange={setEditText} rows={2} />
+              <div className={styles.boxFoot}>
+                <span className={styles.context}>Editing your comment</span>
+                <button type="button" className={styles.ghost} onClick={() => setEditingId(null)}>Cancel</button>
+                <button type="button" className={styles.send} onClick={submitEdit} disabled={!editText.trim()}>Update</button>
+              </div>
+            </>
+          ) : (
+            <>
+              <MentionInput
+                value={text}
+                onChange={setText}
+                placeholder={replyTo ? `Reply to ${replyName}…` : "Add a comment… @mention friends"}
+                rows={2}
+              />
+              <div className={styles.boxFoot}>
+                {replyTo && (
+                  <span className={styles.context}>
+                    Replying to {replyName}
+                    <button type="button" className={styles.clear} onClick={() => setReplyTo(null)} aria-label="Cancel reply">
+                      <X size={13} />
+                    </button>
+                  </span>
+                )}
+                <button type="button" className={styles.send} onClick={submit} disabled={loading || !text.trim()}>
+                  {replyTo ? "Reply" : "Comment"}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       )}
-
-      <MentionInput
-        value={text}
-        onChange={setText}
-        placeholder={replyTo ? "Write a reply…" : "Write a comment…"}
-        rows={3}
-      />
-
-      <button onClick={submit} disabled={loading}>
-        {replyTo ? "Reply" : "Comment"}
-      </button>
     </div>
   );
 }

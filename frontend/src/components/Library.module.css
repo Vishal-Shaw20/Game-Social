@@ -1,128 +1,744 @@
+/* The Library page (Library.jsx and components/library/*), in the game
+   page's language: near-black glass panels with hairlines, uppercase labels,
+   round chips, hollow controls. The page's accent is the site's warm accent; each
+   card glows in its own game's colour (--tint, from its cover art). No blur
+   or backdrop filters (Chrome ghosting). */
+
 .library {
-  padding: 48px 64px;
+  --accent: #d4956e;
+  padding: 40px 64px 64px 80px;
   color: #e6edf3;
-}
-
-.libraryHeader {
-  margin-bottom: 32px;
-}
-
-.libraryHeader h2 {
-  margin: 0 0 6px;
-  font-size: 26px;
-  font-weight: 700;
-}
-
-.libraryHeader span {
-  font-size: 13px;
-  opacity: 0.65;
-}
-
-.libraryGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 24px;
-}
-
-.gameCard {
-  background: rgba(255,255,255,0.04);
-  backdrop-filter: blur(14px);
-  border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 28px;
-  padding: 20px;
   display: flex;
   flex-direction: column;
-  align-items: stretch;
-  gap: 14px;
-  transition: all 0.25s ease;
+  gap: 18px;
 }
 
-.gameCard img {
+/* ── the hero: your most played games' art as a tilted wall on the right
+   (the homepage hero's idea), fading into the dark behind the title, and
+   your numbers as stat blocks along the bottom. --accent here is your most
+   played game's colour (set inline, like a game page's). No blur. ── */
+.hero {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  min-height: 300px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 28px;
+  padding: 34px 32px 28px 40px;
+  border-radius: 20px;
+  background: #07090d;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, rgba(255, 255, 255, 0.06));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 18px 40px rgba(0, 0, 0, 0.45),
+    0 0 40px color-mix(in srgb, var(--accent) 8%, transparent);
+  transition: border-color 0.6s ease, box-shadow 0.6s ease;
+}
+/* the game's colour as a glowing edge, like the game page's panels */
+.hero::before {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  left: 0;
+  top: 30px;
+  bottom: 30px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--accent);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 75%, transparent);
+}
+/* the art wall: four columns of covers, staggered, tilted away in 3D */
+.heroArt {
+  position: absolute;
+  z-index: -2;
+  top: -60px;
+  bottom: -60px;
+  left: 34%;
+  right: -80px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-content: center;
+  gap: 12px;
+  transform: perspective(1400px) rotateY(-18deg) rotateX(7deg) rotateZ(-5deg);
+  transform-origin: left center;
+  pointer-events: none;
+}
+.heroArt img {
+  display: block;
   width: 100%;
-  height: 140px;
-  border-radius: 22px;
+  aspect-ratio: 16 / 9;
   object-fit: cover;
-  box-shadow: 0 10px 32px rgba(0,0,0,0.45);
-  transition: transform 0.25s ease;
+  border-radius: 12px;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 14px 30px rgba(0, 0, 0, 0.55);
 }
-
-.clickable {
+.heroArt img:nth-child(4n + 2) { transform: translateY(26px); }
+.heroArt img:nth-child(4n + 3) { transform: translateY(-14px); }
+.heroArt img:nth-child(4n) { transform: translateY(12px); }
+/* the dark the art fades into (left and bottom), and the game's colour
+   washing in from the top left */
+.heroShade {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background:
+    radial-gradient(90% 120% at 0% 0%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 60%),
+    linear-gradient(90deg, #07090d 0%, #07090d 30%, rgba(7, 9, 13, 0.82) 48%, rgba(7, 9, 13, 0.35) 70%, rgba(7, 9, 13, 0.15) 100%),
+    linear-gradient(0deg, rgba(7, 9, 13, 0.92) 0%, rgba(7, 9, 13, 0) 55%);
+  pointer-events: none;
+}
+.heroMain { position: relative; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.heroTitle {
+  margin: 0;
+  font-size: clamp(34px, 3.2vw, 48px);
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  color: #f0f6fc;
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.6);
+}
+.heroTitleRow { display: flex; align-items: center; gap: 14px; }
+/* sync with Steam: a dark, quiet round icon that only lights up on hover */
+.syncIcon {
+  all: unset;
   cursor: pointer;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  color: #484f58;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  transition: color 0.2s ease, background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.syncIcon:hover:not(:disabled) {
+  color: #c9d1d9;
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+.syncIcon:hover:not(:disabled) svg { transform: rotate(60deg); }
+.syncIcon svg { transition: transform 0.35s ease; }
+.syncIcon:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.syncIcon:disabled { cursor: default; }
+.syncIconBusy { color: var(--accent); }
+.syncIconBusy svg { animation: syncSpin 0.9s linear infinite; }
+@keyframes syncSpin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .syncIconBusy svg { animation: none; }
+}
+.heroStats { position: relative; display: flex; flex-wrap: wrap; gap: 10px; margin: 0; }
+.heroStat {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 4px;
+  min-width: 124px;
+  padding: 12px 16px;
+  box-sizing: border-box;
+  border-radius: 14px;
+  background: rgba(5, 7, 12, 0.72);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.09) inset, 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+.heroStat dt { font-size: 11.5px; font-weight: 500; color: #8b949e; white-space: nowrap; }
+.heroStat dd {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  color: #f0f6fc;
+  white-space: nowrap;
+}
+.heroUnit { margin-left: 2px; font-size: 0.6em; font-weight: 600; color: #8b949e; }
+.heroStatAccent dd { color: var(--accent); text-shadow: 0 0 24px color-mix(in srgb, var(--accent) 50%, transparent); }
+/* most played: its cover beside the name */
+.heroStatTop {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas: "thumb name" "thumb label";
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 3px;
+  max-width: 300px;
+  padding-left: 10px;
+}
+.heroStatThumb { grid-area: thumb; width: 72px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 8px; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1); }
+.heroStatTop dd { grid-area: name; font-size: 16px; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; }
+.heroStatTop dt { grid-area: label; }
+.syncNote { margin: 8px 0 0; font-size: 13px; color: #8b949e; }
+
+/* ── panels ── */
+.panel {
+  position: relative;
+  padding: 18px 20px 20px 24px;
+  border-radius: 16px;
+  background:
+    radial-gradient(120% 120% at 0% 0%, color-mix(in srgb, var(--accent) 6%, transparent), transparent 55%),
+    linear-gradient(180deg, #07090d 0%, #0a0d13 100%);
+  border: 1px solid color-mix(in srgb, var(--accent) 10%, rgba(255, 255, 255, 0.06));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+.panel::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 18px;
+  bottom: 18px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--accent);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+.panelTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 14px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8b949e;
+}
+.count {
+  min-width: 20px;
+  padding: 1px 8px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  color: #c9d1d9;
+  background: rgba(255, 255, 255, 0.08);
 }
 
-.clickable:hover {
-  background: rgba(255,255,255,0.12);
-  transform: translateY(-3px);
-  box-shadow: 0 14px 40px rgba(0,0,0,0.35);
+/* ── where your hours go: genres as quiet text tabs beside the shelves,
+   each with its share and a thin meter of it underneath, in the box's
+   colour. The picked one lights up (and filters All games); its x, or
+   picking it again, clears it. Scrolls sideways if they don't all fit. ── */
+.genreChips {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.genreChips::-webkit-scrollbar { display: none; }
+.gChip {
+  all: unset;
+  flex: none;
+  position: relative;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 7px 11px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+  color: #8b949e;
+  transition: color 0.2s ease, background 0.2s ease;
+}
+.gChip b { font-size: 11.5px; font-weight: 700; font-variant-numeric: tabular-nums; color: #484f58; transition: color 0.2s ease; }
+/* the share meter */
+.gChip::after {
+  content: "";
+  position: absolute;
+  left: 11px;
+  right: 11px;
+  bottom: 3px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 45%, transparent) var(--w, 0%), rgba(255, 255, 255, 0.05) var(--w, 0%));
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+.gChip:hover { color: #e6edf3; background: rgba(255, 255, 255, 0.035); }
+.gChip:hover b { color: #8b949e; }
+.gChip:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.gChipOn,
+.gChipOn:hover { color: #f0f6fc; background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.gChipOn b,
+.gChipOn:hover b { color: var(--accent); }
+.gChipOn::after {
+  background: linear-gradient(90deg, var(--accent) var(--w, 0%), color-mix(in srgb, var(--accent) 15%, transparent) var(--w, 0%));
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 60%, transparent);
 }
 
-.clickable:hover img {
-  transform: scale(1.06);
+/* ── the carousel rows: the homepage's, full bleed to the page's gutters ── */
+.rows { --page-pad-l: 80px; --page-pad-r: 64px; display: flex; flex-direction: column; }
+/* a row emptied during the visit keeps its place and height (a card's:
+   16:9 art at the carousel's --card-w plus its title), so nothing jumps */
+.rowEmpty { --card-w: 320px; }
+.rowEmpty > h2 { font-size: 20px; font-weight: 700; margin: 16px 0 14px; }
+.rowEmpty > p {
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  height: calc(var(--card-w) * 9 / 16 + 43px);
+  margin: 0;
+  border-radius: 12px;
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  font-size: 13px;
+  color: #6e7681;
 }
+@media (max-width: 1280px) { .rowEmpty { --card-w: 286px; } }
+@media (max-width: 768px) { .rowEmpty { --card-w: 244px; } }
 
-.clickable:active {
-  transform: translateY(-1px);
+/* ── all games: a title like the rows', then one toolbar row ── */
+/* A box like the hero: the same dark glass, the same colour (your most
+   played game's, set inline as --accent) on its border, wash and glowing
+   edge. The games scroll inside it, about three rows at a time, on the
+   site's scrollbar (ScrollRail). */
+.allGames {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  margin-top: 8px;
+  padding: 22px 24px 24px 36px;
+  border-radius: 20px;
+  background:
+    radial-gradient(70% 90% at 0% 0%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 60%),
+    linear-gradient(180deg, #07090d 0%, #0a0d13 100%);
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, rgba(255, 255, 255, 0.06));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 18px 40px rgba(0, 0, 0, 0.45),
+    0 0 40px color-mix(in srgb, var(--accent) 8%, transparent);
+  transition: border-color 0.6s ease, box-shadow 0.6s ease;
 }
-
-.disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-  filter: grayscale(0.4);
+.allGames::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 30px;
+  bottom: 30px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--accent);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 75%, transparent);
 }
-
-.disabled:hover {
-  transform: none;
-  background: rgba(255,255,255,0.04);
+.sectionTitle { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 20px; font-weight: 700; }
+.gridWrap { position: relative; }
+/* room around the cards so their hover glow isn't cut off, and a lane on
+   the right for the scrollbar */
+.gridScroll {
+  max-height: min(620px, 68vh);
+  box-sizing: border-box;
+  overflow-y: auto;
+  /* at its end, the wheel carries on scrolling the page */
+  overscroll-behavior: auto;
+  margin: -10px -24px -10px -10px;
+  padding: 10px 24px 10px 10px;
+}
+/* the box's header: the title with search, sort and Filters on its right;
+   under it one quiet line of shelves | genres, then a hairline */
+.allHead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.allNav {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding-bottom: 14px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.allNav .tabs { flex: none; }
+.navDivider { flex: none; width: 1px; height: 20px; background: rgba(255, 255, 255, 0.1); }
+.toolbarEnd { display: flex; align-items: center; gap: 8px; flex: 0 1 auto; min-width: 0; }
+.tabs {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  background: #05070a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.tab {
+  all: unset;
+  cursor: pointer;
+  padding: 5px 14px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #8b949e;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.tab:hover { color: #e6edf3; }
+.tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tabOn,
+.tabOn:hover { color: #f0f6fc; background: rgba(255, 255, 255, 0.09); }
+.search {
+  flex: 0 1 240px;
+  min-width: 140px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 12px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  color: #6e7681;
+  background: #05070a;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+}
+.search:focus-within { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
+.search input,
+.search input:focus {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: none;
+  border-radius: 0;
   box-shadow: none;
+  outline: none;
+  background: transparent;
+  color: #e6edf3;
+  font: inherit;
+  font-size: 13px;
 }
 
-.gameName {
+/* the Filters button and its popover */
+.filterWrap { position: relative; flex: none; }
+.filterBtn {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 14px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #c9d1d9;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+.filterBtn:hover { background: rgba(255, 255, 255, 0.07); }
+.filterBtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.filterBtnOn { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+/* on the button's corner, so it doesn't change the button's width */
+.filterCount {
+  position: absolute;
+  top: -6px;
+  right: -4px;
+  min-width: 18px;
+  box-shadow: 0 0 0 2px #07090d;
+  padding: 1px 5px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 800;
+  color: #05070a;
+  background: var(--accent);
+}
+.filterPop {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 340px;
+  max-width: calc(100vw - 32px);
+  padding: 16px;
+  box-sizing: border-box;
+  border-radius: 16px;
+  background: #0a0d13;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+}
+.subLabel { display: block; margin: 0 0 8px; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #6e7681; }
+.filterSelects { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
+.clearBtn {
+  all: unset;
+  cursor: pointer;
+  margin-top: 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #8b949e;
+}
+.clearBtn:hover { color: #f0f6fc; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.chip {
+  all: unset;
+  cursor: pointer;
+  padding: 5px 13px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #8b949e;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+.chip:hover { color: #e6edf3; background: rgba(255, 255, 255, 0.07); }
+.chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.chipOn,
+.chipOn:hover {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.chipCount { margin-left: 6px; font-size: 11px; opacity: 0.7; font-variant-numeric: tabular-nums; }
+.empty { margin: 24px 0 8px; text-align: center; font-size: 14px; color: #8b949e; }
+/* a library bigger than the box keeps the box's height whatever the
+   filters leave, so filtering, searching or switching shelf never makes
+   the page below jump */
+.gridScrollFixed { height: min(620px, 68vh); }
+.gridScrollFixed .empty { margin-top: 60px; }
+/* an empty shelf's tab: still there (so the tabs don't shift), quieter */
+.tabEmpty { opacity: 0.45; }
+
+/* ── the cards: art first, like the homepage's. Tags on the art, the name
+   under it, a glow in the game's colour (--tint) on hover; the actions show
+   over the art's bottom on hover or keyboard focus. ── */
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 24px 18px; }
+.card {
+  --tint: var(--accent);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  cursor: pointer;
+  outline: none;
+}
+.cardUnmatched { cursor: default; }
+.cardArt {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #0d1117, #05070a);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06);
+  transition: box-shadow 0.25s ease;
+}
+.card:hover .cardArt,
+.card:focus-within .cardArt {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--tint) 60%, transparent),
+    0 10px 28px color-mix(in srgb, var(--tint) 22%, transparent),
+    0 0 22px color-mix(in srgb, var(--tint) 18%, transparent);
+}
+.card:focus-visible .cardArt { box-shadow: 0 0 0 2px var(--tint); }
+.cardArt img { display: block; width: 100%; height: 100%; object-fit: cover; transition: transform 0.6s ease; }
+.card:hover .cardArt img { transform: scale(1.04); }
+.cardScrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.5) 0%, transparent 30%, transparent 55%, rgba(0, 0, 0, 0.75) 100%);
+  pointer-events: none;
+}
+.cardTags { position: absolute; top: 8px; left: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
+.tag,
+.verdictTag,
+.achPill {
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #f0f6fc;
+  background: rgba(5, 7, 10, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  white-space: nowrap;
+}
+.tagRecent { color: #7ee787; border-color: rgba(63, 185, 80, 0.5); }
+.verdictTag {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  color: var(--v);
+  border-color: color-mix(in srgb, var(--v) 55%, transparent);
+}
+.cardActions {
+  --accent: var(--tint); /* its dropdown's, too */
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  opacity: 0;
+  transform: translateY(6px);
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.card:hover .cardActions,
+.card:focus-within .cardActions { opacity: 1; transform: none; pointer-events: auto; }
+@media (hover: none) {
+  .cardActions { opacity: 1; transform: none; pointer-events: auto; }
+}
+.actionsGap { flex: 1; }
+.achPill { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; color: #c9d1d9; }
+.achBar { width: 36px; height: 4px; border-radius: 999px; background: rgba(255, 255, 255, 0.14); overflow: hidden; }
+.achBar span { display: block; height: 100%; background: var(--tint); }
+.reviewBtn {
+  all: unset;
+  cursor: pointer;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 800;
+  color: #05070a;
+  background: var(--tint);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--tint) 45%, transparent);
+}
+.reviewBtn:focus-visible { outline: 2px solid #f0f6fc; outline-offset: 2px; }
+/* a game we couldn't match: its name on a dark tile, and "Find match" */
+.cardEmpty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px;
+  background:
+    radial-gradient(120% 90% at 100% 0%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 60%),
+    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.02) 0 10px, transparent 10px 20px),
+    linear-gradient(160deg, #0d1117, #05070a);
+}
+.cardEmpty > span {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: #c9d1d9;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.findBtn {
+  all: unset;
+  cursor: pointer;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  transition: background 0.15s ease;
+}
+.findBtn:hover { background: color-mix(in srgb, var(--accent) 20%, transparent); }
+.findBtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.cardBody { display: flex; align-items: center; gap: 8px; min-width: 0; height: 24px; padding: 0 2px; }
+.cardTitle {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
   font-size: 15px;
   font-weight: 600;
-  line-height: 1.4;
-  margin-top: 4px;
+  line-height: 1.3;
+  color: #e6edf3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color 0.2s ease;
 }
-
-.gameTime {
-  font-size: 12px;
-  opacity: 0.6;
-}
-
-.rawgMissing {
-  margin-top: 6px;
-  font-size: 11px;
-  color: #f85149;
-  background: rgba(248,81,73,0.12);
-  border: 1px solid rgba(248,81,73,0.35);
+.card:hover .cardTitle { color: color-mix(in srgb, var(--tint) 55%, #ffffff); }
+.shelfBadge {
+  flex: none;
+  padding: 2px 8px;
   border-radius: 999px;
-  padding: 4px 10px;
-  width: fit-content;
-  backdrop-filter: blur(6px);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--tint) 75%, #ffffff);
+  border: 1px solid color-mix(in srgb, var(--tint) 40%, transparent);
 }
-
-.libraryState {
-  padding: 80px 24px;
-  text-align: center;
-  opacity: 0.8;
+.faces { flex: none; display: flex; align-items: center; }
+.face {
+  box-sizing: border-box;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: #e6edf3;
+  background: #05070a;
+  border: 2px solid #0a0d13;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.14);
 }
+.face + .face { margin-left: -6px; }
+.faceMore { margin-left: 6px; font-size: 11px; color: #8b949e; }
 
-.libraryState h2 {
-  font-size: 26px;
-  margin-bottom: 10px;
+/* ── find a match: a panel over the page ── */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(3, 5, 9, 0.72);
 }
-
-.libraryState p {
-  font-size: 15px;
-  opacity: 0.7;
+.dialog { width: min(920px, 100%); max-height: min(80vh, 760px); display: flex; flex-direction: column; }
+.dialogBody { min-height: 0; overflow-y: auto; }
+.closeBtn {
+  all: unset;
+  cursor: pointer;
+  margin-left: auto;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  color: #8b949e;
+  letter-spacing: 0;
 }
+.closeBtn:hover { color: #e6edf3; background: rgba(255, 255, 255, 0.08); }
+.miniArt { flex: none; width: 64px; aspect-ratio: 16 / 9; border-radius: 6px; overflow: hidden; background: #05070a; }
+.miniArt img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.miniName { flex: 1; min-width: 0; font-size: 13px; color: #e6edf3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.miniHours { flex: none; font-size: 11.5px; color: #8b949e; font-variant-numeric: tabular-nums; text-align: right; }
+.matchList { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
+.matchItem {
+  all: unset;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+.matchItem:hover { border-color: color-mix(in srgb, var(--accent) 50%, transparent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.matchItem:disabled { cursor: default; opacity: 0.6; }
+.error { font-size: 13px; color: #f85149; }
 
-.libraryStateError {
-  max-width: 420px;
-  margin: 80px auto;
-  background: rgba(248,81,73,0.1);
-  border: 1px solid rgba(248,81,73,0.35);
-  border-radius: 24px;
-  padding: 32px;
-  backdrop-filter: blur(12px);
-  color: #f85149;
+/* ── loading / not linked ── */
+.libraryState { padding: 80px 24px; text-align: center; color: #c9d1d9; }
+.libraryState h2 { font-size: 26px; margin-bottom: 10px; }
+.libraryState p { font-size: 15px; color: #8b949e; }
+.libraryStateError { color: #f85149; }
+
+@media (max-width: 1100px) {
+  .heroArt { left: 20%; opacity: 0.6; }
+  .heroStat { flex: 1 1 124px; }
+  .heroStatTop { max-width: none; }
+}
+@media (max-width: 760px) {
+  .library { padding: 24px 16px 48px; }
+  .rows { --page-pad-l: 16px; --page-pad-r: 16px; }
+  .toolbarEnd { width: 100%; }
+  .search { flex: 1 1 auto; }
 }

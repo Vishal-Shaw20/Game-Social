@@ -9,6 +9,13 @@ import {
 const libraryCache = new Map();
 const CACHE_TTL = 5 * 60 * 1000;
 
+// Steam games RAWG couldn't match automatically, and when we last tried:
+// not asked again for a day, so a library with a few unmatchable games
+// doesn't make RAWG calls (seconds) on every load. "Find match" on the
+// Library page links them by hand.
+const matchMisses = new Map(); // appid -> ms
+const MISS_RETRY_MS = 24 * 60 * 60 * 1000;
+
 setInterval(() => {
   const now = Date.now();
   for (const [key, entry] of libraryCache) {
@@ -40,10 +47,13 @@ export async function getLibraryForUser(userId) {
   const mappings = await getMappingsBySteamIds(allSteamIds);
 
   // Phase 2: auto-match unmapped games (still per-game — calls external RAWG API)
-  const unmapped = library.games.filter(g => !mappings.has(g.appid));
+  const unmapped = library.games.filter(
+    g => !mappings.has(g.appid) && Date.now() - (matchMisses.get(g.appid) ?? 0) > MISS_RETRY_MS
+  );
   for (const game of unmapped) {
     try {
       const match = await autoMatchRawg(game.appid, game.name, { threshold: 0.55 });
+      if (!match) matchMisses.set(game.appid, Date.now());
       if (match) {
         const saved = await upsertMapping(game.appid, match.rawgId, {
           source: "auto",
@@ -68,37 +78,28 @@ export async function getLibraryForUser(userId) {
     }
   }
 
-  if (rawgIds.length === 0) {
-    return {
-      linked: true,
-      steamId: library.steamId,
-      gameCount: library.gameCount,
-      lastSyncedAt: library.lastSyncedAt,
-      games: []
-    };
-  }
-
-  const { rows: rawgGames } = await pg.query(
-    `SELECT * FROM games WHERE id = ANY($1)`,
-    [rawgIds]
-  );
+  const { rows: rawgGames } = rawgIds.length
+    ? await pg.query(
+        `SELECT id, name, background_image, genres, platforms, rating, metacritic, released
+           FROM games WHERE id = ANY($1)`,
+        [rawgIds]
+      )
+    : { rows: [] };
 
   const rawgMap = new Map();
   for (const g of rawgGames) {
     rawgMap.set(String(g.id), g);
   }
 
-  const finalGames = library.games
-    .map(game => {
-      const rawgId = steamToRawg.get(game.appid);
-      if (!rawgId) return null;
-
-      return {
-        steam: game,
-        rawg: rawgMap.get(rawgId) || null
-      };
-    })
-    .filter(Boolean);
+  // Every Steam game, matched to RAWG or not (unmatched ones get
+  // rawg: null, and the Library page offers to find their match).
+  const finalGames = library.games.map(game => {
+    const rawgId = steamToRawg.get(game.appid);
+    return {
+      steam: game,
+      rawg: (rawgId && rawgMap.get(rawgId)) || null
+    };
+  });
 
   const result = {
     linked: true,

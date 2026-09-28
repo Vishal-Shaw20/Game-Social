@@ -1,6 +1,6 @@
 import React from "react";
 
-export default function TagSelector({ tags, selected, onChange }) {
+export default function TagSelector({ tags, selected, onChange, labelOf = (t) => t }) {
   const toggle = (tag) => {
     onChange(
       selected.includes(tag)
@@ -18,7 +18,7 @@ export default function TagSelector({ tags, selected, onChange }) {
           className={selected.includes(tag) ? "active" : ""}
           onClick={() => toggle(tag)}
         >
-          {tag}
+          {labelOf(tag)}
         </button>
       ))}
     </div>

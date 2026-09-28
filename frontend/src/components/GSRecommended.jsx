@@ -7,11 +7,6 @@ export default function GameSocialRecommended() {
     <GameCarousel
       url={`${API_URL}/api/gsrecommended`}
       title="GameSocial Picks"
-      badgeText="Recommended"
-      showHero
-      renderSubtitle={(item) =>
-        item.released ? `Released ${item.released}` : "Release date N/A"
-      }
     />
   );
 }

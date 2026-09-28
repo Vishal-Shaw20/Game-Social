@@ -1,0 +1,51 @@
+/* Custom scrollbar for the game dock (ScrollRail.jsx). --accent comes from
+   the dock (GameDock.module.css): the warm accent, or the picked verdict's colour. */
+
+.scroller {
+  scrollbar-width: none;
+}
+.scroller::-webkit-scrollbar {
+  display: none;
+}
+
+/* The track: a slim hollow glass pill, like a small copy of the toggle. */
+.rail {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  right: 0;
+  width: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid color-mix(in srgb, var(--accent, #d4956e) 28%, transparent);
+  box-sizing: border-box;
+  cursor: pointer;
+  touch-action: none;
+  z-index: 2;
+  transition: border-color 0.2s ease;
+}
+.rail:hover {
+  border-color: color-mix(in srgb, var(--accent, #d4956e) 50%, transparent);
+}
+
+/* The thumb: tinted glass with an accent edge; glows while held. */
+.thumb {
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  border-radius: 999px;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent, #d4956e) 55%, transparent),
+    color-mix(in srgb, var(--accent, #d4956e) 30%, transparent)
+  );
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent, #d4956e) 25%, transparent);
+  cursor: grab;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+.thumb:hover,
+.dragging {
+  background: color-mix(in srgb, var(--accent, #d4956e) 75%, transparent);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--accent, #d4956e) 45%, transparent);
+}
+.dragging { cursor: grabbing; }

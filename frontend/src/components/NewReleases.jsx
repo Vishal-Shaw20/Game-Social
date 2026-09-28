@@ -1,4 +1,5 @@
 import GameCarousel from "./GameCarousel";
+import { formatRelease } from "../utils/formatRelease";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -7,11 +8,7 @@ export default function NewReleases() {
     <GameCarousel
       url={`${API_URL}/api/new-releases`}
       title="New Releases"
-      badgeText="New"
-      showHero
-      renderSubtitle={(item) =>
-        item.released ? `Released ${item.released}` : "Release date N/A"
-      }
+      renderDateTag={formatRelease}
     />
   );
 }

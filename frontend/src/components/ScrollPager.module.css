@@ -1,0 +1,38 @@
+/* The Trending Spotlight's segmented pager (TrendingSpotlight.module.css
+   .pager/.dash), shared so every horizontal strip on the game page shows its
+   position the same way: equal dashes, the current one grows and lights up
+   in the game's colour (--tint, set on the game page; the warm accent elsewhere). */
+
+.pager {
+  display: flex;
+  gap: 6px;
+  margin: 18px 0 0;
+}
+
+.dash {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 4px;
+  padding: 0;
+  border: none;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.16);
+  cursor: pointer;
+  transition: background 0.3s ease, flex-grow 0.35s ease;
+}
+
+.dash:hover {
+  background: rgba(255, 255, 255, 0.36);
+}
+
+.dashActive,
+.dashActive:hover {
+  flex-grow: 4;
+  background: var(--tint, #d4956e);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--tint, #d4956e) 45%, transparent);
+}
+
+.dash:focus-visible {
+  outline: 2px solid var(--tint, var(--color-border-focus, #58a6ff));
+  outline-offset: 3px;
+}

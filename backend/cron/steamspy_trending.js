@@ -8,6 +8,7 @@ import { readFileSync } from "fs";
 import path from "path";
 import { Agent as UndiciAgent } from "undici";
 import logger from "../config/logger.js";
+import { classifyLatestBucket } from "../utils/steamAppInfo.js";
 
 const STEAMSPY_URL = "https://steamspy.com/api.php?request=top100in2weeks";
 
@@ -233,17 +234,19 @@ export async function fetchAndStore({ enforceTimestampIdempotency = true } = {})
     // Cleanup old snapshots
     const KEEP = Number(process.env.KEEP_SNAPSHOTS ?? 56);
     if (KEEP > 0) {
+      // Keep the newest KEEP snapshots by time. This used to rank by
+      // bucket_id, which is a random UUID, so it retained an arbitrary set
+      // (snapshots months old survived while recent ones were dropped).
       const cleanupSQL = `
-        WITH latest AS (
-          SELECT DISTINCT bucket_id
+        WITH keep AS (
+          SELECT bucket_id
           FROM steamspy_trending
-          ORDER BY bucket_id DESC
+          GROUP BY bucket_id
+          ORDER BY MAX(snapshot_time) DESC
           LIMIT $1
-        ), cutoff AS (
-          SELECT MIN(bucket_id) AS min_bucket FROM latest
         )
         DELETE FROM steamspy_trending
-        WHERE bucket_id < (SELECT min_bucket FROM cutoff)
+        WHERE bucket_id NOT IN (SELECT bucket_id FROM keep)
       `;
       const delRes = await client.query(cleanupSQL, [KEEP]);
       logger.info("Cleanup deleted: %d", delRes.rowCount);
@@ -258,16 +261,27 @@ export async function fetchAndStore({ enforceTimestampIdempotency = true } = {})
   }
 }
 
+// Fetch the snapshot, then classify any new apps in it as game or software
+// (utils/steamAppInfo.js) so /api/trending can leave the software out. The
+// classify step also runs when the fetch is skipped as already done, which is
+// what backfills a snapshot taken before classification existed.
+function fetchThenClassify(label) {
+  return fetchAndStore()
+    .catch(e => logger.error({ err: e }, `${label} fetch failed`))
+    .then(() => classifyLatestBucket())
+    .catch(e => logger.error({ err: e }, `${label} app classification failed`));
+}
+
 export function startCron({ runImmediately = true } = {}) {
   cron.schedule("0 */6 * * *", () => {
     logger.info("Cron triggered for SteamSpy trending");
-    fetchAndStore().catch(e => logger.error({ err: e }, "Scheduled fetch failed"));
+    fetchThenClassify("Scheduled");
   }, {
     scheduled: true,
     timezone: "UTC"
   });
 
   if (runImmediately) {
-    fetchAndStore().catch(e => logger.error({ err: e }, "Initial fetch failed"));
+    fetchThenClassify("Initial");
   }
 }

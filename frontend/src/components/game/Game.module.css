@@ -1,0 +1,58 @@
+/* The game page's layout (GameDetails and components/game/*): the section
+   gutters, the title band, the About / facts columns and the rows of games.
+   The panels themselves are styled in GameHero.module.css (the title panel)
+   and GamePanels.module.css (About, Media, facts, news, requirements); the
+   dock and its modal have their own files. */
+
+/* Sections use the full width, between the left nav rail and the
+   notifications strip (--pad-l / --pad-r are set on the page container,
+   GameDetails.module.css; the dock's modal uses the same gutters). */
+.section {
+  padding: 36px var(--pad-r, 56px) 36px var(--pad-l, 96px);
+}
+
+/* The rows of games (GameCarousel, as on the homepage): they run to the
+   page's edges, the first card lined up with the titles. */
+.rows {
+  padding: 0 var(--pad-r, 56px) 12px var(--pad-l, 96px);
+  --page-pad: var(--pad-l, 96px); /* the spotlight's clearance for the nav */
+  --page-pad-l: var(--pad-l, 96px);
+  --page-pad-r: var(--pad-r, 56px);
+}
+
+/* Under the screenshot: its pager, then the title panel (GameHero, styled
+   in GameHero.module.css), in the page's gutters. */
+.heroBar {
+  padding: 14px var(--pad-r, 56px) 8px var(--pad-l, 96px);
+}
+
+/* ── about + facts ── */
+
+/* About + media | facts (EvenColumns): as tall as the shorter side (height
+   set inline), the taller one scrolling; the 22px on each is the
+   scrollbar's lane, so the facts stay 380px wide. */
+.evenCols {
+  --accent: var(--tint, #d4956e); /* the ScrollRail's colour: the game's */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 402px;
+  gap: 18px;
+}
+.evenCol { position: relative; min-width: 0; min-height: 0; }
+/* room under each side's last panel (its shadow, and air before the end
+   of the scroll); counted in the measured height, so both sides get it */
+.evenScroll > div { padding-bottom: 16px; }
+/* each side's scrollbar only while you're over that side (or dragging it) */
+.evenRail { opacity: 0; transition: opacity 0.2s ease; }
+.evenCol:hover .evenRail,
+.evenRail:active { opacity: 1; }
+.evenScroll {
+  height: 100%;
+  overflow-y: auto;
+  padding-right: 22px;
+  box-sizing: border-box;
+  overscroll-behavior: auto;
+}
+@media (max-width: 960px) {
+  .evenCols { grid-template-columns: 1fr; gap: 36px; }
+  .evenScroll { height: auto; overflow: visible; padding-right: 0; }
+}

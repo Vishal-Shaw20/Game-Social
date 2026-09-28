@@ -1,0 +1,178 @@
+/* Deleting your account (DangerZone.jsx): the whole page washed blood-red
+   (a "color" blend keeps its shapes but turns every hue red), a dark
+   vignette closing in with a heartbeat, a dialog that slams in with a
+   shake, a button you have to hold down, and a cut to black at the end.
+   No blur (Chrome ghosting). */
+
+.doom { position: fixed; inset: 0; z-index: 2000; display: grid; place-items: center; }
+
+/* the red wash over everything */
+.tint {
+  position: absolute;
+  inset: 0;
+  background: #b0121c;
+  mix-blend-mode: color;
+  animation: tintIn 0.9s ease-out both;
+  pointer-events: none;
+}
+.shadow {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at center, rgba(40, 0, 4, 0.35) 0%, rgba(20, 0, 2, 0.8) 55%, rgba(5, 0, 1, 0.97) 100%);
+  animation: tintIn 0.9s ease-out both, heartbeat 1.6s ease-in-out 0.9s infinite;
+}
+@keyframes tintIn { from { opacity: 0; } }
+@keyframes heartbeat {
+  0%, 100% { opacity: 1; }
+  14% { opacity: 0.8; }
+  28% { opacity: 1; }
+  42% { opacity: 0.86; }
+}
+
+.dialog {
+  position: relative;
+  width: min(540px, calc(100vw - 32px));
+  box-sizing: border-box;
+  padding: 34px 34px 30px;
+  border-radius: 22px;
+  color: #f5d0d0;
+  background: linear-gradient(180deg, rgba(26, 4, 7, 0.96), rgba(12, 2, 4, 0.98));
+  border: 1px solid rgba(255, 70, 70, 0.45);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6), 0 30px 80px rgba(0, 0, 0, 0.8), 0 0 70px rgba(220, 20, 30, 0.35);
+  animation: slam 0.55s cubic-bezier(0.2, 1.4, 0.4, 1) both, shake 0.5s ease-in-out 0.45s;
+}
+@keyframes slam { from { opacity: 0; transform: scale(1.25); } }
+@keyframes shake {
+  15%, 55% { transform: translateX(-7px) rotate(-0.4deg); }
+  35%, 75% { transform: translateX(7px) rotate(0.4deg); }
+  90% { transform: translateX(-2px); }
+}
+
+.skull {
+  display: block;
+  margin: 0 auto 14px;
+  color: #ff3b3b;
+  filter: drop-shadow(0 0 14px rgba(255, 40, 40, 0.8));
+  animation: glow 1.6s ease-in-out infinite;
+}
+@keyframes glow { 50% { filter: drop-shadow(0 0 26px rgba(255, 40, 40, 1)); } }
+
+.title {
+  margin: 0;
+  text-align: center;
+  font-size: clamp(30px, 4vw, 40px);
+  font-weight: 900;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+  color: #ff4040;
+  text-shadow: 0 0 22px rgba(255, 30, 30, 0.7), 0 0 60px rgba(255, 0, 0, 0.35);
+}
+.sub { margin: 10px 0 22px; text-align: center; font-size: 14px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #ff8a8a; }
+
+.lists { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 22px; }
+.list { padding: 14px 16px; border-radius: 14px; font-size: 13px; line-height: 1.7; }
+.list ul { margin: 0; padding: 0; list-style: none; }
+.list b { display: block; margin-bottom: 4px; font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; }
+.gone { background: rgba(255, 40, 40, 0.08); border: 1px solid rgba(255, 60, 60, 0.3); color: #ffb3b3; }
+.gone b { color: #ff5c5c; }
+.stays { background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); color: #b9a9a9; }
+.stays b { color: #d9c9c9; }
+
+.label { display: block; margin-bottom: 8px; font-size: 13px; color: #d9a9a9; }
+.label code { padding: 1px 6px; border-radius: 6px; font-weight: 700; color: #fff; background: rgba(255, 60, 60, 0.2); }
+.input,
+.input:focus {
+  box-sizing: border-box;
+  width: 100%;
+  height: 46px;
+  margin: 0 0 16px;
+  padding: 0 14px;
+  border-radius: 12px;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 80, 80, 0.35);
+  box-shadow: none;
+  outline: none;
+}
+.input:focus { border-color: #ff4d4d; box-shadow: 0 0 0 3px rgba(255, 50, 50, 0.2); }
+
+/* hold to delete: fills over the hold, empties fast if you let go */
+.hold {
+  all: unset;
+  position: relative;
+  overflow: hidden;
+  box-sizing: border-box;
+  width: 100%;
+  height: 54px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #fff;
+  background: #3a0a0e;
+  border: 1px solid rgba(255, 60, 60, 0.6);
+  box-shadow: 0 0 30px rgba(255, 30, 30, 0.25);
+}
+.hold::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform-origin: left;
+  transform: scaleX(0);
+  background: linear-gradient(90deg, #b3121b, #ff2a2a);
+  transition: transform 0.3s ease-out;
+}
+.holding::before { transform: scaleX(1); transition: transform var(--hold, 2.5s) linear; }
+.holding { animation: tremble 0.12s linear infinite; }
+@keyframes tremble {
+  25% { transform: translate(1px, -1px); }
+  75% { transform: translate(-1px, 1px); }
+}
+.hold span { position: relative; }
+.hold:disabled { cursor: not-allowed; opacity: 0.4; box-shadow: none; }
+.hold:focus-visible { outline: 2px solid #ff6b6b; outline-offset: 3px; }
+.keep {
+  all: unset;
+  display: block;
+  margin: 16px auto 0;
+  cursor: pointer;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #d9c9c9;
+}
+.keep:hover { color: #fff; text-decoration: underline; text-underline-offset: 3px; }
+.keep:focus-visible { outline: 2px solid #ff6b6b; outline-offset: 3px; border-radius: 4px; }
+.err { margin: 14px 0 0; text-align: center; font-size: 13px; color: #ff8a8a; }
+
+/* the end: a cut to black */
+.final {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 10px;
+  background: #000;
+  animation: tintIn 1.2s ease-in both;
+  text-align: center;
+}
+.final h2 { margin: 0; font-size: clamp(26px, 3vw, 36px); font-weight: 900; letter-spacing: 0.02em; color: #ff3b3b; text-shadow: 0 0 30px rgba(255, 0, 0, 0.6); }
+.final p { margin: 0; font-size: 14px; color: #7a6a6a; letter-spacing: 0.2em; text-transform: uppercase; }
+
+@media (max-width: 560px) {
+  .lists { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .shadow, .dialog, .skull, .holding { animation: none; }
+  .tint, .final { animation-duration: 0.01s; }
+}

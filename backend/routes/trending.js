@@ -7,6 +7,8 @@ import {
   autoMatchRawg
 } from "../utils/steamRawgmap.js";
 import logger from "../config/logger.js";
+import { ensureSteamAppInfoTable } from "../utils/steamAppInfo.js";
+import { summarize } from "../utils/gameText.js";
 
 const router = express.Router();
 
@@ -41,17 +43,33 @@ router.get("/", async (req, res) => {
 
     const client = await pool.connect();
     try {
-      // Phase 1: fetch trending rows
-      const trendingSql = `WITH ranked AS (
-        SELECT *, ROW_NUMBER() OVER (PARTITION BY steam_id ORDER BY snapshot_time DESC) rn
-        FROM steamspy_trending
-      ),
-      latest AS (
-        SELECT * FROM ranked WHERE rn = 1
-      )
-      SELECT * FROM latest
-      ORDER BY snapshot_time DESC
-      LIMIT $1`;
+      // Phase 1: the newest snapshot, ranked by players.
+      // Sorting by snapshot_time used to decide the order, but every row in a
+      // snapshot shares its timestamp, so ties fell back to insertion order —
+      // ascending Steam app ID (SteamSpy keys its response by appid and
+      // Object.values walks numeric keys in order). That put Half-Life (634
+      // players) first and left PUBG, Rust and Apex out of the top 25.
+      // ccu is SteamSpy's peak concurrent players yesterday; steam_id breaks
+      // ties so the order is stable between requests.
+      //
+      // Software (Wallpaper Engine and the like) is left out using the
+      // game/software classification in steam_app_info (utils/steamAppInfo.js);
+      // an override there wins. Apps not classified yet count as games, so a
+      // Steam outage can only let software through, never hide a game. The
+      // filter runs before LIMIT, so the list is still `limit` games long.
+      await ensureSteamAppInfoTable();
+      const trendingSql = `
+        SELECT t.*
+        FROM steamspy_trending t
+        LEFT JOIN steam_app_info i ON i.steam_id = t.steam_id
+        WHERE t.bucket_id = (
+          SELECT bucket_id FROM steamspy_trending
+          ORDER BY snapshot_time DESC
+          LIMIT 1
+        )
+          AND COALESCE(i.override, i.is_game, true)
+        ORDER BY t.ccu DESC NULLS LAST, t.steam_id
+        LIMIT $1`;
 
       const { rows } = await client.query(trendingSql, [limit]);
       const steamIds = rows.map(r => Number(r.steam_id));
@@ -111,7 +129,9 @@ router.get("/", async (req, res) => {
       let gameMap = new Map();
       if (allRawgIds.length > 0) {
         const { rows: gameRows } = await client.query(
-          `SELECT id, slug, released, platforms, background_image
+          `SELECT id, slug, released, platforms, background_image,
+                  genres, metacritic, rating, developers, publishers,
+                  description_raw
            FROM games WHERE id = ANY($1)`,
           [allRawgIds]
         );
@@ -131,12 +151,18 @@ router.get("/", async (req, res) => {
           steam_id: String(row.steam_id),
           title: row.name,
           players: row.ccu,
+          // Steam review counts from SteamSpy, for the spotlight's
+          // "% positive" line.
+          positive: row.positive,
+          negative: row.negative,
           score: row.score_rank,
           snapshot_time: row.snapshot_time,
           rawg_id: mapping?.rawg_id ?? null,
           background_image: game?.background_image ?? null,
           mapping,
-          games: game ? [game] : []
+          games: game
+            ? [{ ...game, description_raw: undefined, summary: summarize(game.description_raw) }]
+            : []
         };
       });
 

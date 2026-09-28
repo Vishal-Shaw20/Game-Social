@@ -6,7 +6,12 @@ export function useCarouselScroll() {
   const scrollSpeed = useRef(0);
 
   const animateScroll = useCallback(() => {
-    if (!carouselRef.current) return;
+    // Stop once the pointer is back in the middle: the loop used to keep
+    // running every frame until the mouse left the row, doing nothing.
+    if (!carouselRef.current || scrollSpeed.current === 0) {
+      rafRef.current = null;
+      return;
+    }
     carouselRef.current.scrollLeft += scrollSpeed.current;
     // eslint-disable-next-line react-hooks/immutability
     rafRef.current = requestAnimationFrame(animateScroll);

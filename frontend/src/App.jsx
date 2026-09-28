@@ -3,6 +3,7 @@ import React from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 
 import Layout from "./components/Layout.jsx";
+import { VoiceProvider } from "./realtime/VoiceProvider.jsx";
 import HomePage from "./HomePage.jsx";
 import Dashboard from "./components/DashBoard.jsx";
 import GameDetails from "./components/GameDetails.jsx";
@@ -10,6 +11,8 @@ import LoginPage from "./components/LoginPage.jsx";
 import Library from "./components/Library.jsx"
 import Social from "./components/Social.jsx"
 import UserProfile from "./components/UserProfile";
+import SearchPage from "./SearchPage.jsx";
+import QuickLookProvider from "./components/quicklook/QuickLookProvider.jsx";
 function App() {
   
 
@@ -18,9 +21,12 @@ function App() {
 
   return (
     <Router>
+      <VoiceProvider>
+      <QuickLookProvider>
       <Routes>
         <Route element={<Layout />}>
           <Route path="/" element={<HomePage />} />
+          <Route path="/search" element={<SearchPage />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/game/:id" element={<GameDetails />} />
           <Route path="/login" element={<LoginPage />} />
@@ -35,6 +41,8 @@ function App() {
           element={<div style={{ padding: 50, color: "#fff" }}>404</div>}
         />
       </Routes>
+      </QuickLookProvider>
+      </VoiceProvider>
     </Router>
   );
 }

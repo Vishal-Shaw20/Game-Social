@@ -75,7 +75,48 @@
   transform: translateY(-50%) translateX(0);
 }
 
+/* Hidden labels must not catch clicks. Layout.module.css forces
+   pointer-events: auto on every sidebar descendant, so at opacity 0 these
+   still sat invisibly over the page (x 58-102) and swallowed clicks on
+   whatever was underneath. Two-class selectors so they win over that rule
+   regardless of stylesheet order; the label becomes clickable again while
+   its button is hovered, so its text still works as part of the button. */
+.hoverBtn .label {
+  pointer-events: none;
+}
+
+.hoverBtn:hover .label {
+  pointer-events: auto;
+}
+
+/* Library and Social while signed out: there, but dimmed and not a link
+   (the tooltip says why); it doesn't open out on hover */
+.disabled,
+.disabled:hover {
+  width: 44px;
+  border-radius: 50%;
+  background: rgba(20, 30, 45, 0.85);
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+.disabled:hover .label { opacity: 0; }
+
 .hoverBtn:global(.active) {
   background: rgba(90, 160, 255, 0.35);
   color: #ffffff;
 }
+
+/* Back (every page): the same round button, as a <button>, pinned near the
+   top of the screen above the brand, without moving the rail */
+.backBtn {
+  position: fixed;
+  left: 12px;
+  top: 24px;
+  z-index: 30;
+  display: block;
+  padding: 0;
+  border: none;
+  font: inherit;
+  cursor: pointer;
+}
+.backBtn:focus-visible { outline: 2px solid #79c0ff; outline-offset: 2px; }

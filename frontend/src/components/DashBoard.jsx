@@ -1,165 +1,144 @@
-import React, { useEffect, useState } from "react";
-import styles from "./DashBoard.module.css";
+import { useCallback, useEffect, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Check, Eye, Link2, LogOut, Pencil } from "lucide-react";
+import { useArtTint } from "../hooks/useArtTint";
+import ProfileHero from "./profile/ProfileHero";
+import EditProfile from "./profile/EditProfile";
+import StatusPanel from "./profile/StatusPanel";
+import FriendsPanel from "./profile/FriendsPanel";
+import VoicePanel from "./profile/VoicePanel";
+import ConnectionsPanel from "./profile/ConnectionsPanel";
+import SecurityPanel from "./profile/SecurityPanel";
+import NotificationsPanel from "./profile/NotificationsPanel";
+import DangerZone from "./profile/DangerZone";
+import styles from "./profile/Profile.module.css";
 
+const API = import.meta.env.VITE_API_URL;
+
+/*
+ * Your profile (/dashboard), from /api/account: a hero with you (over your
+ * banner game's art, or your most played games', in their colour, like the
+ * Library), your status, friends, push-to-talk, connected accounts,
+ * security (email, password, other devices), notifications, and deleting
+ * your account. What you play lives on the Library page, not here.
+ */
 export default function Dashboard() {
-  const [user, setUser] = useState(null);
+  const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+  const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [editing, setEditing] = useState(false);
-  const [form, setForm] = useState({
-    displayName: "",
-    username: ""
-  });
+  const [copied, setCopied] = useState(false);
+  // A Google / Steam sign-up that picked a username for you says so once.
+  const [assigned] = useState(() => params.get("usernameAssigned") === "true");
 
   useEffect(() => {
-    fetch(`${import.meta.env.VITE_API_URL}/auth/user`, {
-      credentials: "include"
-    })
-      .then(res => {
-        if (!res.ok) throw new Error();
-        return res.json();
-      })
-      .then(data => {
-        setUser(data);
-        setForm({
-          displayName: data.displayName || "",
-          username: data.username || ""
-        });
-      })
-      .catch(() =>
-        setError("Failed to load user. Please try logging in again.")
-      );
-  }, []);
+    if (params.has("usernameAssigned")) setParams({}, { replace: true });
+  }, [params, setParams]);
 
-  const handleLogout = async () => {
-    const res = await fetch(
-      `${import.meta.env.VITE_API_URL}/auth/logout`,
-      { method: "POST", credentials: "include" }
-    );
-    if (res.ok) window.location.href = "/";
-    else setError("Logout failed");
+  const load = useCallback(
+    () =>
+      fetch(`${API}/api/account`, { credentials: "include" })
+        .then((r) => {
+          if (r.status === 401) {
+            navigate("/login", { replace: true });
+            return null;
+          }
+          return r.ok ? r.json() : Promise.reject();
+        })
+        .then((j) => {
+          if (!j) return;
+          setData(j);
+          setError(null);
+        })
+        .catch(() => setError("Couldn't load your profile. Try again in a moment.")),
+    [navigate]
+  );
+  useEffect(() => { load(); }, [load]);
+
+  const banner = data?.profile.banner?.cover;
+  const tint = useArtTint(banner ? [banner] : data?.wall?.slice(0, 3) ?? []);
+
+  const logout = async () => {
+    await fetch(`${API}/auth/logout`, { method: "POST", credentials: "include" }).catch(() => {});
+    navigate("/login", { replace: true });
   };
 
-  const handleConnect = provider => {
-    window.location.href = `${import.meta.env.VITE_API_URL}/auth/${provider}`;
-  };
+  if (error) return <div className={`${styles.state} ${styles.stateError}`}>{error}</div>;
+  if (!data) return <div className={styles.state}>Loading your profile…</div>;
 
-  const handleSave = async () => {
+  const { profile } = data;
+  const publicPath = profile.username ? `/u/${profile.username}` : null;
+  const copy = async () => {
     try {
-      const res = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/profile`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify(form)
-        }
-      );
-
-      if (!res.ok) throw new Error();
-      const updated = await res.json();
-      setUser(updated);
-      setEditing(false);
+      await navigator.clipboard.writeText(`${window.location.origin}${publicPath}`);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
     } catch {
-      setError("Profile update failed");
+      /* no clipboard (not a secure context): nothing to do */
     }
   };
 
-  const isConnected = provider =>
-    user?.linkedAccounts?.some(a => a.provider === provider);
-
   return (
-    <div className={styles.dashRoot}>
-      <div className={styles.dashHeader}>
-        <div>
-          <h1>Profile</h1>
-          <p>Your profile & linked gaming accounts</p>
+    <div className={styles.page} style={tint ? { "--accent": tint } : undefined}>
+      {assigned && profile.username && (
+        <p className={styles.notice}>
+          We picked <b>@{profile.username}</b> for you.
+          <button type="button" className={`${styles.btnGhost} ${styles.small}`} onClick={() => setEditing(true)}>Change it</button>
+        </p>
+      )}
+
+      <ProfileHero
+        person={profile}
+        stats={data.stats}
+        wall={data.wall}
+        actions={
+          <>
+            <button type="button" className={styles.btnAccent} onClick={() => setEditing(true)}>
+              <Pencil size={14} /> Edit profile
+            </button>
+            {publicPath && (
+              <Link className={styles.btnGhost} to={publicPath}>
+                <Eye size={15} /> View public profile
+              </Link>
+            )}
+            {publicPath && (
+              <button type="button" className={styles.iconBtn} onClick={copy} aria-label="Copy link to your public profile" title={copied ? "Copied" : "Copy link to your public profile"}>
+                {copied ? <Check size={15} /> : <Link2 size={15} />}
+              </button>
+            )}
+            <button type="button" className={styles.iconBtn} onClick={logout} aria-label="Log out" title="Log out">
+              <LogOut size={15} />
+            </button>
+          </>
+        }
+      />
+
+      <div className={styles.columns}>
+        <div className={styles.col}>
+          <StatusPanel key={profile.status?.text ?? ""} status={profile.status} onChange={load} />
+          <FriendsPanel friends={data.friends} />
+          <VoicePanel />
         </div>
-
-        <div className={styles.headerActions}>
-          <button
-            className={styles.connectBtn}
-            onClick={() => setEditing(v => !v)}
-          >
-            {editing ? "Cancel" : "Edit Profile"}
-          </button>
-
-          <button className={styles.logoutBtn} onClick={handleLogout}>
-            Logout
-          </button>
+        <div className={styles.col}>
+          <ConnectionsPanel connections={data.connections} onChange={load} />
+          <SecurityPanel email={profile.email} emailVerified={profile.emailVerified} hasPassword={data.hasPassword} onChange={load} />
+          <NotificationsPanel prefs={data.notifications} />
         </div>
       </div>
 
-      {error && <div className={styles.dashError}>{error}</div>}
+      <DangerZone username={profile.username} />
 
-      {!user ? (
-        <div className={styles.dashLoading}>Loading profile…</div>
-      ) : (
-        <div className={styles.dashGrid}>
-          <section className={`${styles.dashCard} ${styles.profileCard}`}>
-            <div className={styles.profileMain}>
-              <div className={styles.avatarGlow}>
-                {user.displayName?.[0] || "U"}
-              </div>
-
-              <div className={styles.profileInfo}>
-                {editing ? (
-                  <>
-                    <input
-                      className={styles.profileInput}
-                      value={form.displayName}
-                      onChange={e =>
-                        setForm({ ...form, displayName: e.target.value })
-                      }
-                      placeholder="Display name"
-                    />
-                    <input
-                      className={styles.profileInput}
-                      value={form.username}
-                      onChange={e =>
-                        setForm({ ...form, username: e.target.value })
-                      }
-                      placeholder="Username"
-                    />
-                    <button
-                      className={`${styles.connectBtn} ${styles.saveBtn}`}
-                      onClick={handleSave}
-                    >
-                      Save Changes
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <h2>{user.displayName}</h2>
-                    <span>{user.username}</span>
-                    <span>{user.email}</span>
-                  </>
-                )}
-              </div>
-            </div>
-          </section>
-
-          <section className={`${styles.dashCard} ${styles.accountsCard}`}>
-            <h3>Connected Accounts</h3>
-
-            <div className={styles.accountsList}>
-              {["google", "steam", "epic", "riot"].map(p => (
-                <div key={p} className={styles.accountRow}>
-                  <span className={styles.provider}>{p}</span>
-                  {isConnected(p) ? (
-                    <span className={styles.statusConnected}>Connected</span>
-                  ) : (
-                    <button
-                      className={styles.connectBtn}
-                      onClick={() => handleConnect(p)}
-                    >
-                      Connect
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          </section>
-        </div>
+      {editing && (
+        <EditProfile
+          profile={profile}
+          accent={tint}
+          onClose={() => setEditing(false)}
+          onSaved={() => {
+            setEditing(false);
+            load();
+          }}
+        />
       )}
     </div>
   );

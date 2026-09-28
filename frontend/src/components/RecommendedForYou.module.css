@@ -1,0 +1,37 @@
+/* Shown only while gamiq is still working on a first set of
+   recommendations; the real row replaces it. */
+.pending {
+  width: 100%;
+}
+
+.title {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 16px 0 14px;
+}
+
+.note {
+  margin: 0 0 24px;
+  font-size: var(--text-sm);
+  color: var(--color-text-tertiary);
+}
+
+/* "…" that fills in, so a long wait doesn't look frozen. */
+.dots::after {
+  content: "";
+  animation: dots 1.2s steps(4, end) infinite;
+}
+
+@keyframes dots {
+  0% { content: ""; }
+  25% { content: "."; }
+  50% { content: ".."; }
+  75% { content: "..."; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dots::after {
+    content: "…";
+    animation: none;
+  }
+}

@@ -131,7 +131,6 @@ jobs:
               --from-literal=EPIC_CLIENT_ID='${{ secrets.BACKEND_EPIC_CLIENT_ID }}' \
               --from-literal=EPIC_CLIENT_SECRET='${{ secrets.BACKEND_EPIC_CLIENT_SECRET }}' \
               --from-literal=EPIC_TOKEN_URL='${{ secrets.BACKEND_EPIC_TOKEN_URL }}' \
-              --from-literal=RIOT_API_KEY='${{ secrets.BACKEND_RIOT_API_KEY }}' \
               --from-literal=GOOGLE_CLIENT_ID='${{ secrets.BACKEND_GOOGLE_CLIENT_ID }}' \
               --from-literal=GOOGLE_CLIENT_SECRET='${{ secrets.BACKEND_GOOGLE_CLIENT_SECRET }}' \
               --from-literal=EMAIL_USER='${{ secrets.BACKEND_EMAIL_USER }}' \

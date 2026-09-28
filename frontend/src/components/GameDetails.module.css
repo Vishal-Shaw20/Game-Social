@@ -1,121 +1,58 @@
+/* The game page's frame: page, Back button, hero, About. Flat on purpose:
+   solid colours, no overlays, gradients, masks or glows. (The dock and its
+   modals have their own styles.) */
+
 .container {
+  /* Layout's scroller is a column flexbox of fixed height: without this the
+     page shrank to one screen tall, its content spilled out below and the
+     app's background glow showed through behind the lower sections. */
+  flex: none;
+  /* The page gutters, shared by every section (Game.module.css): clear of
+     the left nav rail and the notifications strip, like the dock's modal. */
+  --pad-l: 96px;
+  --pad-r: 56px;
   background: #0b0f16;
   color: #e6edf3;
   min-height: 100vh;
 }
 
-.sectionInner {
-  max-width: 1200px;
-  margin: 0 auto;
-}
-
-.backButton {
-  position: fixed;
-  top: 24px;
-  left: 24px;
-  z-index: 30;
-  background: rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  color: white;
-  padding: 10px 18px;
-  border-radius: 999px;
-  cursor: pointer;
-  margin-top: 20px;
-}
-
+/* The screenshot as a plain banner; the game's info is in the band below
+   it (Game.module.css .heroBar). */
+/* Its height is set inline (aspect-ratio): as tall as the tallest of the
+   game's screenshots at full width, so it stays the same across slides.
+   Each image is shown whole at the full width, centred vertically; the space
+   around a shorter one is transparent (the page shows through). */
 .hero {
-  height: 560px;
   position: relative;
+  width: 100%;
   display: flex;
-  align-items: flex-end;
-  background-size: cover;
-  background-position: center;
+  align-items: center;
+  overflow: hidden;
+  /* Never Chrome's scroll anchor: a shorter slide re-centres its image
+     60px lower, and with the banner as the anchor Chrome scrolled the whole
+     page to follow it, so everything below jumped on each slide change. */
+  overflow-anchor: none;
 }
-
-.heroOverlay {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    to top,
-    rgba(11, 15, 22, 1) 0%,
-    rgba(11, 15, 22, 0.7) 40%,
-    rgba(11, 15, 22, 0.25) 65%,
-    transparent 85%
-  );
-}
-
-.heroContent {
-  position: relative;
-  z-index: 2;
-  padding: 0 64px 64px;
-  max-width: 800px;
+/* a horizontal swipe changes the screenshot (vertical still scrolls) */
+.hero { touch-action: pan-y; }
+.heroImg {
+  display: block;
+  width: 100%;
+  height: auto;
 }
 
 .heroDashes {
-  position: absolute;
-  bottom: 26px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 8px;
+  /* The shared segmented pager (ScrollPager), at the top of the info band,
+     just below the image. */
+  margin: 0 0 20px;
 }
 
-.dash {
-  all: unset;
-  width: 22px;
-  height: 5px;
-  background: rgba(255, 255, 255, 0.35);
-  border-radius: 3px;
-  cursor: pointer;
-}
-
-.dashActive {
-  width: 34px;
-  background: linear-gradient(90deg, #58a6ff, #79c0ff);
-}
-
+/* loading / error / not found */
 .section {
-  padding: 48px 64px;
-  max-width: 1200px;
-  margin: 0 auto;
+  padding: 48px var(--pad-r, 56px) 48px var(--pad-l, 96px);
 }
 
-.descWrap {
-  position: relative;
-}
 
-.desc {
-  line-height: 1.8;
-  font-size: 16px;
-  max-height: 240px;
-  overflow: hidden;
-  transition: max-height 0.6s ease;
-}
-
-.descOpen {
-  max-height: 3000px;
-}
-
-.descVignette {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 120px;
-  pointer-events: none;
-  background: linear-gradient(
-    to bottom,
-    rgba(11, 15, 22, 0) 0%,
-    rgba(11, 15, 22, 0.6) 40%,
-    rgba(11, 15, 22, 0.85) 70%,
-    rgba(11, 15, 22, 1) 100%
-  );
-}
-
-.toggle {
-  all: unset;
-  margin-top: 24px;
-  color: #79c0ff;
-  cursor: pointer;
+@media (max-width: 960px) {
+  .container { --pad-l: 20px; --pad-r: 20px; }
 }

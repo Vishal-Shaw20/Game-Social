@@ -62,3 +62,7 @@
 .mentionItem:active {
   background: var(--color-bg-secondary);
 }
+
+.mentionItemActive {
+  background: var(--color-bg-tertiary);
+}

@@ -21,16 +21,23 @@ import "./strategies/steam.js";
 import authRoutes from "./routes/authRoutes.js";
 import apiRoutes from "./routes/apiRoutes.js";
 import gameLookup from "./routes/gameLookup.js";
+import gamePage from "./routes/gamePage.js";
 import trending from "./routes/trending.js";
 import socketHandlers from "./social/socketServer.js";
 import friendRoutes from "./routes/friendRoutes.js";
+import libraryRoutes from "./routes/libraryRoutes.js";
+import conversationRoutes from "./routes/conversationRoutes.js";
+import configRoutes from "./routes/configRoutes.js";
+import recommendedRoutes from "./routes/recommendedRoutes.js";
 
 import { startCron } from "./cron/steamspy_trending.js";
 import { startRawgCron } from "./cron/rawg_games.js";
 
 import reviewRoutes from "./routes/reviewRoutes.js";
+import reviewDraftRoutes from "./routes/reviewDraftRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
 import searchRoutes from "./routes/searchRoutes.js";
+import heroRoutes from "./routes/heroRoutes.js";
 
 dotenv.config();
 
@@ -115,15 +122,31 @@ passport.deserializeUser(async (id, done) => {
 // app.js / server.js
 import profileRoutes from "./routes/profile.js";
 app.use("/api/profile", profileRoutes);
+import accountRoutes, { avatarRouter } from "./routes/accountRoutes.js";
+app.use("/api/account", accountRoutes);
+app.use("/api/avatar", avatarRouter);
 
 app.use("/auth", authRoutes);
-app.use("/api", apiLimiter, apiRoutes);
+
+// Specific /api/<sub> routers must be mounted BEFORE the general /api mount:
+// app.use("/api", ...) matches every /api sub-path and calls next() even when
+// apiRoutes has no handler for it, so mounting it first would make every
+// request below also consume an apiLimiter token on top of its own limiter.
 app.use("/api/gameLookup", gameLookup);
+app.use("/api/gamepage", gamePage);
 app.use("/api/trending", trending);
 app.use("/api/reviews", reviewRoutes);
+app.use("/api/review-drafts", reviewDraftRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/search", searchRoutes);
+app.use("/api/hero", heroRoutes);
 app.use("/api/friends", friendRoutes);
+app.use("/api/library", libraryRoutes);
+app.use("/api/conversations", conversationRoutes);
+app.use("/api/config", configRoutes);
+app.use("/api/recommended", recommendedRoutes);
+
+app.use("/api", apiLimiter, apiRoutes);
 
 app.get("/", (req, res) => {
   res.json({
@@ -154,12 +177,19 @@ io.use((socket, next) => {
   }
 
   User.findById(sess.passport.user)
-    .select("_id username displayName avatar")
+    // friends included: presence changes are pushed to this user's friends
+    // (social/socketServer.js), so the list must be on the socket.
+    .select("_id username displayName profilePicture linkedAccounts.avatar friends")
     .lean()
     .then(user => {
       if (!user) {
         return next(new Error("User not found"));
       }
+      // One picture for chat and voice: the uploaded one, else a linked
+      // account's. Only the avatar of linkedAccounts is selected, and the
+      // list is dropped so no account details ride along on the socket.
+      user.avatar = user.profilePicture || user.linkedAccounts?.find(a => a.avatar)?.avatar || null;
+      delete user.linkedAccounts;
       socket.user = user;
       next();
     })

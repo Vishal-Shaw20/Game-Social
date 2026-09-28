@@ -20,6 +20,15 @@ export default defineConfig(({ mode }) => {
           target: env.VITE_API_URL,
           changeOrigin: true,
           secure: true
+        },
+        // The shared socket (src/realtime/socket.js) connects to the page's
+        // own origin, as in production where the ingress routes /socket.io to
+        // the backend. Without this, in dev it hit Vite and never connected:
+        // no live notifications, activity or game chat.
+        "/socket.io": {
+          target: env.VITE_API_URL,
+          changeOrigin: true,
+          ws: true
         }
       }
     }

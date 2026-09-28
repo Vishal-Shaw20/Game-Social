@@ -1,0 +1,298 @@
+.card {
+  /* Sized by the carousel via --card-w so one variable drives the row. */
+  flex: 0 0 var(--card-w, 320px);
+  width: var(--card-w, 320px);
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  /* Square and borderless: with gap:0 on the row the cards butt together into
+     one continuous strip, and a real border would double up into a 2px seam
+     between neighbours. The hover ring below is drawn as an inset shadow
+     instead, which costs no layout width. */
+  border: none;
+  border-radius: 0;
+  /* No panel fill: with the cards flush their backgrounds merged into one
+     opaque slab across the row. Transparent lets the page aurora through, so
+     the art reads as floating on the page. */
+  background: transparent;
+  overflow: hidden;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  outline: none;
+  position: relative;
+  /* Only the art and the title text are clickable (re-enabled on those
+     below); the empty strip beside the title is not. Clicks on the art or
+     title still bubble to this button, since bubbling ignores
+     pointer-events. It also means hovering that empty space no longer
+     counts as hovering the card. */
+  pointer-events: none;
+}
+
+/* Hover lives entirely inside the card's own box: the cards are a flush,
+   square strip, so anything that moves the card (a lift) or paints outside it
+   (a glow) tears the strip or gets sliced by the row's edge haze. Instead the
+   art zooms and brightens, the title takes the accent, and the rest of the
+   row dims (see .carousel in GameCarousel.module.css). */
+
+/* Keyboard focus ring as an overlay ABOVE the art. An inset box-shadow on
+   .card itself would be painted under the child art and mostly hidden. */
+.card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  box-shadow: 0 0 0 2px var(--color-border-focus) inset;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.card:focus-visible::after {
+  opacity: 1;
+}
+
+/* ───────── ART ───────── */
+.art {
+  position: relative;
+  /* The reason the cards look consistent: every cover is forced to 16:9
+     regardless of its source ratio, which in this catalogue runs from 1.26
+     to 3.10. */
+  aspect-ratio: 16 / 9;
+  width: 100%;
+  overflow: hidden;
+  background: linear-gradient(135deg, #131a26, #0b0f16);
+  pointer-events: auto;
+  /* For the row dimming in GameCarousel.module.css, which filters this whole
+     box (art plus the tags over it) on the cards not being hovered. */
+  transition: filter 0.35s ease;
+}
+
+.art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition:
+    transform 0.6s cubic-bezier(0.2, 0.7, 0.3, 1),
+    filter 0.35s ease;
+}
+
+.card:hover .art img,
+.card:focus-visible .art img {
+  transform: scale(1.045);
+  filter: brightness(1.08) saturate(1.08);
+}
+
+.noArt {
+  width: 100%;
+  height: 100%;
+  background:
+    radial-gradient(60% 60% at 50% 40%, rgba(124, 247, 255, 0.10), transparent 70%),
+    linear-gradient(135deg, #131a26, #0b0f16);
+}
+
+/* Keeps the score and platform chips legible over bright artwork. */
+.artScrim {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.45) 0%, transparent 32%),
+    linear-gradient(to top, rgba(5, 7, 12, 0.85) 0%, transparent 42%);
+}
+
+/* Score (top-right) and year (top-left) are the same dark-glass tag so they
+   read as a matched pair framing the art. The score's text colour is set
+   inline from its value (see scoreColor in GameCard.jsx). */
+.score,
+.year,
+.genre {
+  position: absolute;
+  top: 10px;
+  min-width: 30px;
+  padding: 3px 7px;
+  border-radius: var(--radius-md, 8px);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.3;
+  text-align: center;
+  /* Solid, no backdrop-filter: one blur layer per card (dozens per page)
+     made Chrome layer the page heavily, and on the game page parts of it
+     went stale while scrolling (the doubled-text glitch). */
+  background: rgba(5, 7, 12, 0.78);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.14) inset;
+}
+
+.score {
+  right: 10px;
+}
+
+.year,
+.genre {
+  color: var(--color-text-primary);
+}
+
+.year {
+  left: 10px;
+}
+
+/* Genres sit bottom-right in the same tag style as the year. The row is
+   bounded on the left so it can never run under the platform icons (up to
+   five icons need ~122px); a long genre ellipsises instead. */
+.genres {
+  position: absolute;
+  left: 128px;
+  right: 10px;
+  bottom: 10px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Otherwise identical to the year tag (shape, padding, weight all come from
+   the shared rule above); these lines only let the list lay it out and let a
+   long name truncate instead of pushing into the platform icons. */
+.genre {
+  position: static;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* "+N" for the genres that don't fit. Never shrinks or truncates, and must
+   not clip (unlike .genre) so its popover can escape it. */
+.genreMore {
+  flex: none;
+  position: relative;
+  /* The shared tag rule's top: 10px (meant for the absolutely placed year
+     and score) would push a relatively positioned tag 10px down, off the
+     line of its neighbours. */
+  top: auto;
+  overflow: visible;
+  cursor: default;
+}
+
+/* The hidden genres, stacked above the "+N" tag in the same tag style. Grows
+   upward and leftward from the tag, so it stays inside the art (which clips)
+   rather than running off the card's right edge. */
+.genrePopover {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  opacity: 0;
+  transform: translateY(4px);
+  pointer-events: none;
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease;
+}
+
+.genreMore:hover .genrePopover {
+  opacity: 1;
+  transform: none;
+}
+
+/* Popover entries are plain .genre tags, identical to the listed ones; only
+   the absolute placement from the shared tag rule is undone. */
+.genrePopover .genre {
+  position: static;
+  white-space: nowrap;
+}
+
+/* Slightly smaller so the number stays the focus; inherits the score colour. */
+.pct {
+  margin-left: 1px;
+  font-size: 0.85em;
+}
+
+/* Platform logos sit straight on the art's bottom scrim rather than in pills:
+   at this size a glyph is quicker to read than a label, and dropping the
+   capsules keeps the lower edge of the art uncluttered. */
+.platforms {
+  position: absolute;
+  left: 12px;
+  bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.platform {
+  display: flex;
+  color: rgba(241, 245, 249, 0.82);
+  /* Legibility over bright art, which the bottom scrim alone doesn't
+     guarantee (e.g. Witcher 3's white fog). */
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.75));
+  transition: color 0.25s ease;
+}
+
+.card:hover .platform,
+.card:focus-visible .platform {
+  color: #fff;
+}
+
+/* ───────── BODY ───────── */
+/* Just the title now (plus a one-line subtitle on some rows), since year,
+   genres and platforms moved onto the art. */
+.body {
+  /* Dimmed with the art when another card in the row is hovered
+     (GameCarousel.module.css). */
+  transition: filter 0.35s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px 12px;
+}
+
+.title {
+  /* Shrink to the text so the click target ends where the title does. */
+  width: fit-content;
+  max-width: 100%;
+  pointer-events: auto;
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  line-height: 1.3;
+  color: var(--color-text-primary);
+  /* One line then ellipsis: keeps every card the same height so the strip
+     stays aligned. The full title is in the card's accessible name. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.subtitle {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .art,
+  .art img,
+  .body,
+  .card::after {
+    transition: none;
+  }
+
+  .card:hover .art img,
+  .card:focus-visible .art img {
+    transform: none;
+  }
+}

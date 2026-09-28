@@ -13,7 +13,7 @@ A gaming social platform where players discover games, sync their Steam librarie
 **Game Pages**
 - Detailed game pages with screenshots, descriptions, ratings, and metadata
 - Real-time per-game chat rooms (Socket.IO)
-- Review system with four verdicts (Perfection / Almost had something / Subpar slop / A disaster, but kind of funny) and pro/con tags
+- Review system with four verdicts (Instant classic / Almost there / Subpar slop / Hot mess) and pro/con tags
 - Review comments with @mentions
 - Steam achievement tracking and playtime stats for owned games
 
@@ -42,7 +42,7 @@ A gaming social platform where players discover games, sync their Steam librarie
 | ML Backend | Python 3.13, FastAPI, FAISS, sentence-transformers, ONNX Runtime, Redis |
 | Databases | MongoDB (users, sessions, reviews, libraries), PostgreSQL + pgvector (games, embeddings, chat) |
 | Infrastructure | Kubernetes (kubeadm), Oracle Cloud ARM64, nginx Ingress, cert-manager (Let's Encrypt), Redis 7, Prometheus + Grafana + Loki, GitHub Actions CI/CD |
-| External APIs | RAWG, Steam Web API, SteamSpy, Epic Games, Riot Games |
+| External APIs | RAWG, Steam Web API, SteamSpy, Epic Games |
 
 ## Project Structure
 

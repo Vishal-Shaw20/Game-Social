@@ -13,7 +13,7 @@ Express API server powering GameSocial — handles authentication, game data pro
 | node-pg | PostgreSQL client (games, chat, trending) |
 | Pino | Structured JSON logging |
 | Helmet | HTTP security headers |
-| ioredis | Redis client for rate limiting |
+| ioredis | Redis client for rate limiting and OTP storage |
 | rate-limiter-flexible | Multi-tier rate limiting |
 | node-cron | Scheduled jobs |
 | bcryptjs | Password hashing |
@@ -40,7 +40,7 @@ npm run dev               # nodemon + pino-pretty on port 5000
 | Prefix | File | Purpose |
 |--------|------|---------|
 | `/auth` | authRoutes.js | Login, signup, Google OAuth, Steam OpenID, OTP verification, password reset |
-| `/api` | apiRoutes.js | Steam/RAWG/Epic/Riot API proxies, library, achievements, user search, new releases, GS recommended |
+| `/api` | apiRoutes.js | Steam/RAWG/Epic API proxies, library, achievements, user search, new releases, GS recommended |
 | `/api/gameLookup` | gameLookup.js | PostgreSQL game search by name/slug |
 | `/api/trending` | trending.js | SteamSpy trending games with RAWG enrichment |
 | `/api/reviews` | reviewRoutes.js | Game reviews with four verdicts and pro/con tags |
@@ -58,8 +58,9 @@ backend/
 ├── config/
 │   ├── db.js                  MongoDB (Mongoose) + PostgreSQL (pg Pool) connections
 │   ├── emailService.js        Nodemailer transporter for OTP emails
+│   ├── env.js                 Loads .env and parses/validates env vars (import before reading process.env)
 │   ├── logger.js              Pino structured logger (JSON, ISO timestamps)
-│   └── otpStore.js            In-memory OTP storage with TTL
+│   └── otpStore.js            Redis OTP storage with TTL (in-memory under DEV_MODE)
 ├── routes/
 │   ├── authRoutes.js          Auth endpoints (login, signup, OAuth callbacks, OTP)
 │   ├── apiRoutes.js           Game data proxies, library, achievements, recommendations
@@ -149,7 +150,9 @@ Socket.IO with session-based authentication. The server shares the Express sessi
 
 ## Rate Limiting
 
-Multi-tier Redis-backed rate limiting with automatic in-memory fallback when Redis is unavailable:
+Multi-tier Redis-backed rate limiting with automatic in-memory fallback when Redis is
+unavailable. Note the OTP store (`config/otpStore.js`) has **no** such fallback — if Redis
+is down, signup and password reset fail unless `DEV_MODE=true`:
 
 | Tier | Strategy | Limit | Scope |
 |------|----------|-------|-------|
@@ -159,6 +162,18 @@ Multi-tier Redis-backed rate limiting with automatic in-memory fallback when Red
 | Search | Token bucket + burst | 20 + 10 burst / 60 sec | Search endpoints |
 | Writes | Sliding window counter | 10 / 15 min | Review/comment creation |
 | Public | Token bucket + burst | 150 + 50 burst / 15 min | Unauthenticated routes |
+
+All limits above are defaults and can be overridden per tier from `.env` (see the
+`RATE_LIMIT_*` variables below). Setting `DEV_MODE=true` disables all six HTTP limiters
+entirely — intended for local development only.
+
+Scoped by `req.ip`, with `trust proxy` set to 1. The Socket.IO chat limiter
+(10 msgs / 10 sec, in-memory) is separate and is **not** affected by `DEV_MODE`.
+
+Mount order matters: in `server.js` the specific `/api/<sub>` routers are mounted
+*before* `app.use("/api", apiLimiter, apiRoutes)`. Because `app.use` with a path prefix
+runs for every matching sub-path, mounting the general `/api` limiter first would make
+every sub-router consume an `apiLimiter` token on top of its own limiter.
 
 ## Cron Jobs
 
@@ -190,7 +205,6 @@ All gamiq calls use `GAMIQ_URL` and require `Authorization: Bearer {PIPELINE_API
 | `GOOGLE_CLIENT_SECRET` | Yes | Google OAuth client secret |
 | `STEAM_API_KEY` | Yes | Steam Web API key |
 | `RAWG_API_KEY` | Yes | RAWG API key |
-| `RIOT_API_KEY` | No | Riot Games API key |
 | `EPIC_CLIENT_ID` | No | Epic Games client ID |
 | `EPIC_CLIENT_SECRET` | No | Epic Games client secret |
 | `EPIC_TOKEN_URL` | No | Epic Games OAuth token URL |
@@ -199,8 +213,23 @@ All gamiq calls use `GAMIQ_URL` and require `Authorization: Bearer {PIPELINE_API
 | `FRONTEND_URL` | Yes | Frontend URL for CORS (e.g., `http://localhost:5173`) |
 | `PIPELINE_API_KEY` | Yes | Shared secret for gamiq API calls |
 | `GAMIQ_URL` | No | ML backend URL (default: `http://localhost:8000`) |
-| `REDIS_URL` | No | Redis URL for rate limiting (default: `redis://localhost:6379`) |
+| `REDIS_URL` | **Yes**\* | Redis URL for rate limiting and the OTP store. No default — startup fails if unset. \*Not required when `DEV_MODE=true`. |
 | `KEEP_SNAPSHOTS` | No | Number of SteamSpy snapshots to retain (default: 56) |
+| `DEV_MODE` | No | `true` disables all HTTP rate limiting and switches the OTP store to in-memory, so no Redis is needed (default: `false`) |
+| `RATE_LIMIT_AUTH_POINTS` / `_DURATION` | No | Strict auth tier (defaults: `5` / `900`) |
+| `RATE_LIMIT_EMAIL_POINTS` / `_DURATION` | No | Email/OTP tier (defaults: `3` / `900`) |
+| `RATE_LIMIT_API_POINTS` / `_BURST` / `_DURATION` | No | API reads tier (defaults: `80` / `20` / `900`) |
+| `RATE_LIMIT_SEARCH_POINTS` / `_BURST` / `_DURATION` | No | Search tier (defaults: `20` / `10` / `60`) |
+| `RATE_LIMIT_WRITE_POINTS` / `_DURATION` | No | Writes tier (defaults: `10` / `900`) |
+| `RATE_LIMIT_PUBLIC_POINTS` / `_BURST` / `_DURATION` | No | Public tier (defaults: `150` / `50` / `900`) |
+
+All `_DURATION` values are in **seconds**, and one `_DURATION` applies to both the main and
+burst limiter of its tier. Invalid values fall back to the default with a logged warning.
+
+Environment variables are loaded by `config/env.js`, which resolves `.env` relative to the
+backend directory rather than `process.cwd()`. Import it before reading `process.env` at
+module scope — the ad-hoc `dotenv.config()` calls elsewhere run too late for modules
+evaluated early in the import graph.
 
 ## Deployment
 

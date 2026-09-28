@@ -272,7 +272,11 @@ def fetch_updated_game_ids(since_date: str):
     while page <= MAX_PAGES:
         logger.info("Fetching RAWG updated page %d", page)
 
-        url = f"{RAWG_BASE}?ordering=-updated&dates={since_date},{today}&page={page}"
+        # `updated=` filters by when RAWG last edited the game. This used to be
+        # `dates=`, which filters by RELEASE date, so the pass only ever saw
+        # games released since the last run and missed every other edit
+        # (e.g. a delayed game's new release date).
+        url = f"{RAWG_BASE}?ordering=-updated&updated={since_date},{today}&page={page}"
         response = rawg_get(url)
 
         if response is None or response.status_code != 200:
@@ -414,6 +418,107 @@ def ensure_game(rawg_id: int) -> dict:
         conn.close()
 
 # ============================================================
+# -------------------- REFRESH EXISTING GAMES ----------------
+# ============================================================
+
+def refresh_games(conn, game_ids):
+    """Re-fetch these games from RAWG and overwrite their rows.
+
+    Games whose description changed are re-embedded; their ids and vectors
+    are returned for the caller to add to FAISS (the daily pipeline batches
+    them with Pass 1's). Games RAWG doesn't return are left untouched.
+    """
+    faiss_ids, faiss_vectors = [], []
+    if not game_ids:
+        return faiss_ids, faiss_vectors
+
+    # Fetch old descriptions to detect changes
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, description_raw FROM games WHERE id = ANY(%s)",
+            [list(game_ids)]
+        )
+        old_descriptions = {row[0]: row[1] for row in cur.fetchall()}
+
+    # Parallel fetch details
+    updated_games = {}
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        future_to_id = {
+            executor.submit(fetch_game_details, gid): gid
+            for gid in game_ids
+        }
+        for future in as_completed(future_to_id):
+            gid = future_to_id[future]
+            result = future.result()
+            if result:
+                updated_games[gid] = result
+
+    logger.info("Fetched %d of %d game details", len(updated_games), len(game_ids))
+
+    for i in range(0, len(game_ids), CHUNK_SIZE):
+        chunk_ids = [gid for gid in game_ids[i:i + CHUNK_SIZE] if gid in updated_games]
+        game_rows = []
+        re_embed_texts = []
+        re_embed_ids = []
+
+        for gid in chunk_ids:
+            g = updated_games[gid]
+
+            game_rows.append((
+                clean_int(g.get("id")),
+                clean_text(g.get("slug")),
+                clean_text(g.get("name")),
+                clean_text(g.get("name_original")),
+                clean_text(g.get("description")),
+                clean_text(g.get("description_raw")),
+                clean_text(g.get("released")),
+                clean_text(g.get("background_image")),
+                clean_text(g.get("background_image_additional")),
+                clean_int(g.get("suggestions_count")),
+                extract_platforms(g.get("platforms")),
+                extract_names(g.get("developers")),
+                extract_names(g.get("publishers")),
+                extract_names(g.get("genres")),
+                extract_names(g.get("tags")),
+                json.dumps(g.get("esrb_rating")) if g.get("esrb_rating") else None,
+                clean_text(g.get("website")),
+                clean_int(g.get("screenshots_count")),
+                clean_int(g.get("achievements_count")),
+                clean_int(g.get("game_series_count")),
+                clean_int(g.get("additions_count")),
+                clean_int(g.get("parents_count")),
+                extract_names(g.get("alternative_names")),
+                g.get("rating") or 0.0,
+                clean_int(g.get("ratings_count")),
+                clean_int(g.get("metacritic")),
+            ))
+
+            old_desc = old_descriptions.get(gid)
+            new_desc = clean_text(g.get("description_raw"))
+            if old_desc != new_desc:
+                re_embed_texts.append(build_structured_text(g))
+                re_embed_ids.append(gid)
+
+        if game_rows:
+            upsert_games_batch(conn, game_rows)
+
+        if re_embed_texts:
+            embeddings = encode_texts(re_embed_texts)
+
+            embedding_rows = [
+                (gid, emb.tolist())
+                for gid, emb in zip(re_embed_ids, embeddings)
+            ]
+            insert_embeddings_batch(conn, embedding_rows)
+
+            faiss_ids.extend(re_embed_ids)
+            faiss_vectors.extend(list(embeddings))
+
+        logger.info("Updated chunk %d: %d games, %d re-embedded", i // CHUNK_SIZE + 1, len(chunk_ids), len(re_embed_ids))
+
+    return faiss_ids, faiss_vectors
+
+# ============================================================
 # --------------------- REMOVE LOCK FILE ---------------------
 # ============================================================
 
@@ -431,10 +536,9 @@ def remove_lock_file(log_message: str) -> bool:
 
 CHUNK_SIZE = 50
 
-def run_daily_pipeline():
-    lock_acquired = False
-    conn = None
-
+def _acquire_pipeline_lock() -> bool:
+    """Cross-pod lock (a file on the shared artifacts volume) held by the daily
+    pipeline and the backfill, so they never write at the same time."""
     try:
         if LOCK_FILE_PATH.exists():
             age = time.time() - LOCK_FILE_PATH.stat().st_mtime
@@ -443,16 +547,23 @@ def run_daily_pipeline():
             if age > 21600:
                 logger.warning("Removing stale pipeline lock")
                 if not remove_lock_file("Failed removing stale lock"):
-                    return
+                    return False
 
         fd = os.open(
             LOCK_FILE_PATH,
             os.O_CREAT | os.O_EXCL | os.O_WRONLY
         )
         os.close(fd)
-        lock_acquired = True
+        return True
     except FileExistsError:
         logger.info("Another pod already running pipeline, skipping")
+        return False
+
+
+def run_daily_pipeline():
+    conn = None
+    lock_acquired = _acquire_pipeline_lock()
+    if not lock_acquired:
         return
 
     try:
@@ -609,91 +720,9 @@ def run_daily_pipeline():
 
         if updated_ids:
             logger.info("Found %d updated games", len(updated_ids))
-
-            # Fetch old descriptions to detect changes
-            with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT id, description_raw FROM games WHERE id = ANY(%s)",
-                    [updated_ids]
-                )
-                old_descriptions = {row[0]: row[1] for row in cur.fetchall()}
-
-            # Parallel fetch details
-            updated_games = {}
-            with ThreadPoolExecutor(max_workers=5) as executor:
-                future_to_id = {
-                    executor.submit(fetch_game_details, gid): gid
-                    for gid in updated_ids
-                }
-                for future in as_completed(future_to_id):
-                    gid = future_to_id[future]
-                    result = future.result()
-                    if result:
-                        updated_games[gid] = result
-
-            logger.info("Fetched %d updated game details", len(updated_games))
-
-            for i in range(0, len(updated_ids), CHUNK_SIZE):
-                chunk_ids = [gid for gid in updated_ids[i:i + CHUNK_SIZE] if gid in updated_games]
-
-                game_rows = []
-                re_embed_texts = []
-                re_embed_ids = []
-
-                for gid in chunk_ids:
-                    g = updated_games[gid]
-
-                    game_rows.append((
-                        clean_int(g.get("id")),
-                        clean_text(g.get("slug")),
-                        clean_text(g.get("name")),
-                        clean_text(g.get("name_original")),
-                        clean_text(g.get("description")),
-                        clean_text(g.get("description_raw")),
-                        clean_text(g.get("released")),
-                        clean_text(g.get("background_image")),
-                        clean_text(g.get("background_image_additional")),
-                        clean_int(g.get("suggestions_count")),
-                        extract_platforms(g.get("platforms")),
-                        extract_names(g.get("developers")),
-                        extract_names(g.get("publishers")),
-                        extract_names(g.get("genres")),
-                        extract_names(g.get("tags")),
-                        json.dumps(g.get("esrb_rating")) if g.get("esrb_rating") else None,
-                        clean_text(g.get("website")),
-                        clean_int(g.get("screenshots_count")),
-                        clean_int(g.get("achievements_count")),
-                        clean_int(g.get("game_series_count")),
-                        clean_int(g.get("additions_count")),
-                        clean_int(g.get("parents_count")),
-                        extract_names(g.get("alternative_names")),
-                        g.get("rating") or 0.0,
-                        clean_int(g.get("ratings_count")),
-                        clean_int(g.get("metacritic")),
-                    ))
-
-                    old_desc = old_descriptions.get(gid)
-                    new_desc = clean_text(g.get("description_raw"))
-                    if old_desc != new_desc:
-                        re_embed_texts.append(build_structured_text(g))
-                        re_embed_ids.append(gid)
-
-                if game_rows:
-                    upsert_games_batch(conn, game_rows)
-
-                if re_embed_texts:
-                    embeddings = encode_texts(re_embed_texts)
-
-                    embedding_rows = [
-                        (gid, emb.tolist())
-                        for gid, emb in zip(re_embed_ids, embeddings)
-                    ]
-                    insert_embeddings_batch(conn, embedding_rows)
-
-                    all_faiss_ids.extend(re_embed_ids)
-                    all_faiss_vectors.extend(list(embeddings))
-
-                logger.info("Updated chunk %d: %d games, %d re-embedded", i // CHUNK_SIZE + 1, len(chunk_ids), len(re_embed_ids))
+            ids, vectors = refresh_games(conn, updated_ids)
+            all_faiss_ids.extend(ids)
+            all_faiss_vectors.extend(vectors)
 
         else:
             logger.info("No updated games found")
@@ -724,6 +753,64 @@ def run_daily_pipeline():
             conn.close()
         if lock_acquired and LOCK_FILE_PATH.exists():
             remove_lock_file("Failed to remove pipeline lock")
+# ============================================================
+# -------------------- ONE-OFF BACKFILL ----------------------
+# ============================================================
+
+# Games whose RAWG data changes most: not out yet, or out in the last N days.
+BACKFILL_RECENT_DAYS = 180
+
+
+def backfill_recent_games(game_ids=None) -> dict:
+    """Re-fetch games that went stale while Pass 2 was filtering on release
+    date instead of update date (see fetch_updated_game_ids).
+
+    game_ids: refresh just these (e.g. one game to check first); by default,
+    every game releasing in the future or in the last BACKFILL_RECENT_DAYS.
+    Takes the pipeline lock and finishes like the daily run: FAISS update,
+    pod reload, recommendation cache cleared.
+    """
+    if not _acquire_pipeline_lock():
+        return {"status": "locked"}
+
+    conn = None
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+
+        if game_ids is None:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT id FROM games
+                    WHERE released > CURRENT_DATE - %s
+                    ORDER BY released DESC, id
+                    """,
+                    [BACKFILL_RECENT_DAYS]
+                )
+                game_ids = [row[0] for row in cur.fetchall()]
+
+        game_ids = [int(g) for g in game_ids]
+        logger.info("Backfill: refreshing %d games", len(game_ids))
+
+        ids, vectors = refresh_games(conn, game_ids)
+
+        if ids:
+            append_and_persist(ids, vectors)
+            _reload_all_pods()
+
+        try:
+            clear_recommendation_cache()
+        except Exception:
+            logger.exception("Cache clear failed")
+
+        logger.info("Backfill completed: %d games, %d re-embedded", len(game_ids), len(ids))
+        return {"status": "done", "games": len(game_ids), "re_embedded": len(ids)}
+    finally:
+        if conn:
+            conn.close()
+        if LOCK_FILE_PATH.exists():
+            remove_lock_file("Failed to remove pipeline lock")
+
 # ============================================================
 
 if __name__ == "__main__":

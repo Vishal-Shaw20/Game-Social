@@ -15,8 +15,8 @@ export async function sendOtpEmail(to, otp) {
   const mailOptions = {
     from: `"GameSocial" <${process.env.EMAIL_USER}>`,
     to,
-    subject: "Your OTP Verification Code",
-    text: `Your OTP code is ${otp}. It will expire in 5 minutes.`,
+    subject: "Your GameSocial code",
+    text: `Your GameSocial code is ${otp}. It expires in 5 minutes.\n\nIf you didn't ask for it, you can ignore this email.`,
   };
 
   try {

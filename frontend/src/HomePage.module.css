@@ -1,12 +1,24 @@
 .homepage {
-  padding: 75px;
-  padding-top: 0;
+  /* Side padding for this page's content rows, published so a full-bleed
+     child (the hero) can escape it without hardcoding the value or
+     resorting to 100vw, which overflows whenever a scrollbar is present. */
+  --page-pad: 75px;
+  padding: 0 var(--page-pad);
+  /* No bottom padding: the footer ends the page. */
+  padding-bottom: 0;
   color: #e5e7eb;
   background: transparent;
 }
 
-.header {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 30px;
+@media (max-width: 768px) {
+  .homepage {
+    --page-pad: 16px;
+  }
+}
+
+/* Zero-size marker right after the footer; when it's on screen the page is
+   fully scrolled (HomePage.jsx). */
+.endMarker {
+  height: 1px;
+  margin-top: -1px;
 }

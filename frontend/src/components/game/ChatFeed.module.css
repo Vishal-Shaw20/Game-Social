@@ -1,0 +1,827 @@
+/* Chat side of the game dock's modal (ChatFeed.jsx). The layout, panels and
+   labels come from ReviewFeed.module.css so both sides read as one design;
+   this adds the chat's own pieces in the same language: near-black glass,
+   hairline borders, hollow controls that glow in the accent.
+   --accent comes from the dock root: the warm accent on the chat side. */
+
+.chatPanel, .messages { --a: var(--accent, #d4956e); }
+
+/* ── right column: the room, in the reviews side's language ── */
+.label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8b949e;
+}
+.note { margin: 12px 0 0; font-size: 12px; line-height: 1.5; color: #6e7681; }
+
+/* a panel's title row: dot / icon, label, count */
+.sideTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.titleIcon { color: #8b949e; }
+.pillCount {
+  margin-left: auto;
+  min-width: 20px;
+  padding: 1px 7px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #c9d1d9;
+  background: rgba(255, 255, 255, 0.08);
+}
+.liveDot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #3fb950;
+  box-shadow: 0 0 0 3px rgba(63, 185, 80, 0.2), 0 0 10px rgba(63, 185, 80, 0.6);
+}
+.liveDotIdle { background: #6e7681; box-shadow: 0 0 0 3px rgba(110, 118, 129, 0.18); }
+
+/* activity: the last 24 hours, the gauge's counterpart */
+.activity { padding: 2px 2px 0; }
+.actHead { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+.actNum {
+  font-size: 38px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--accent, #d4956e);
+  text-shadow: 0 0 22px color-mix(in srgb, var(--accent, #d4956e) 45%, transparent);
+  font-variant-numeric: tabular-nums;
+}
+.actBars { display: block; width: 100%; height: 84px; overflow: visible; }
+.actBar {
+  fill: var(--accent, #d4956e);
+  opacity: 0.75;
+  outline: none;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+.actBarEmpty { fill: rgba(255, 255, 255, 0.12); opacity: 1; cursor: default; }
+.activityFocus .actBar { opacity: 0.25; }
+.activityFocus .actBarEmpty { opacity: 1; }
+.activityFocus .actBarOn { opacity: 1; filter: drop-shadow(0 0 6px color-mix(in srgb, var(--accent, #d4956e) 70%, transparent)); }
+.actAxis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-size: 10.5px;
+  color: #6e7681;
+}
+
+/* people as chips, like the reviews side's verdict filters */
+.chipList { display: flex; flex-direction: column; gap: 6px; }
+.personChip {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 40px;
+  padding: 0 12px;
+  box-sizing: border-box;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: background 0.2s ease;
+}
+.personChip:hover { background: rgba(255, 255, 255, 0.06); }
+.personChip > * { position: relative; }
+.personChipPlaying { border-color: rgba(63, 185, 80, 0.35); }
+/* the week's chatters: filled by their share, like a verdict chip */
+.shareChip::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--share, 0%);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent, #d4956e) 4%, transparent), color-mix(in srgb, var(--accent, #d4956e) 14%, transparent));
+  pointer-events: none;
+}
+.personName {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #c9d1d9;
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+a.personName:hover { color: #e6edf3; text-decoration: underline; }
+.inVoice { flex: none; color: #3fb950; }
+.you {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6e7681;
+}
+.playingDot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #3fb950;
+  box-shadow: 0 0 8px rgba(63, 185, 80, 0.7);
+}
+
+/* the stats column while you're in the voice room: voice's green */
+.voicePanel { --accent: #3fb950; }
+.voiceStats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 4px 0 0;
+}
+.voiceStats > div {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 2px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.voiceStats dt { font-size: 11px; color: #8b949e; }
+.voiceStats dd {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: #e6edf3;
+  font-variant-numeric: tabular-nums;
+}
+/* someone talking: a green edge, like the voice column's live dot */
+.personChipTalking {
+  border-color: rgba(63, 185, 80, 0.7);
+  box-shadow: 0 0 0 2px rgba(63, 185, 80, 0.18), 0 0 12px rgba(63, 185, 80, 0.3);
+}
+.voiceMuted { flex: none; color: #f85149; }
+.voiceSince { flex: none; font-size: 12px; color: #6e7681; font-variant-numeric: tabular-nums; }
+
+/* ── messages (left column) ──
+   One panel, the right column's surface: the header, then the list. The
+   ScrollRail sits beside it, in the column's right margin. */
+.chatPanel {
+  height: 100%;
+  margin-right: 22px;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #07090d 0%, #0a0d13 100%);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+.chatHead {
+  flex: none;
+  flex-wrap: nowrap;
+  position: relative;
+  z-index: 5; /* its search results go over the list */
+  margin: 0;
+  padding: 12px 14px 12px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.messages {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 12px 14px 8px;
+  border-radius: 0 0 16px 16px;
+  overscroll-behavior: contain;
+}
+
+/* search this room */
+.search {
+  position: relative;
+  margin-left: auto;
+  width: min(320px, 50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  box-sizing: border-box;
+  padding: 0 8px 0 12px;
+  border-radius: 999px;
+  color: #6e7681;
+  background: #05070a;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.search:focus-within {
+  color: var(--a);
+  border-color: color-mix(in srgb, var(--a) 55%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--a) 12%, transparent);
+}
+/* (the site-wide input styles' padding, radius and focus ring reset) */
+.search input,
+.search input:focus {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  outline: none;
+  background: transparent;
+  color: #e6edf3;
+  font: inherit;
+  font-size: 13px;
+}
+.search input::placeholder { color: #6e7681; }
+.searchClear {
+  all: unset;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  color: #8b949e;
+}
+.searchClear:hover { color: #e6edf3; background: rgba(255, 255, 255, 0.08); }
+
+.results {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(460px, 70vw);
+  max-height: 360px;
+  overflow-y: auto;
+  padding: 6px;
+  border-radius: 12px;
+  background: #0d1015;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.6);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+.resultsNote { margin: 10px; font-size: 13px; color: #8b949e; }
+.result {
+  all: unset;
+  box-sizing: border-box;
+  cursor: pointer;
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  transition: background 0.12s ease;
+}
+.result:hover,
+.result:focus-visible { background: rgba(255, 255, 255, 0.05); }
+.resultBody { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.resultHead { font-size: 12.5px; color: #e6edf3; }
+.resultHead time { margin-left: 6px; font-size: 11px; color: #6e7681; }
+.resultText {
+  font-size: 13px;
+  line-height: 1.4;
+  color: #b5bac1;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.hit {
+  color: #0a0d13;
+  background: var(--a);
+  border-radius: 3px;
+  padding: 0 2px;
+}
+
+.historyEdge {
+  display: flex;
+  justify-content: center;
+  margin: 14px 0 4px;
+}
+.olderBtn {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--a);
+  border: 1px solid color-mix(in srgb, var(--a) 45%, transparent);
+  background: color-mix(in srgb, var(--a) 8%, transparent);
+}
+.olderBtn:hover:not(:disabled) { background: color-mix(in srgb, var(--a) 16%, transparent); }
+.olderBtn:disabled { cursor: default; opacity: 0.7; }
+.startNote {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #484f58;
+}
+
+.day { display: flex; flex-direction: column; padding-bottom: 10px; }
+
+/* the date as a pill on a hairline */
+.dayLabel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 18px 12px 2px;
+}
+.dayLabel::before,
+.dayLabel::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.07);
+}
+.dayPill {
+  padding: 3px 12px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8b949e;
+  background: #05070a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* "New": what arrived since your last visit, in the accent */
+.newLine {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 12px 2px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--a);
+}
+.newLine::before,
+.newLine::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: color-mix(in srgb, var(--a) 45%, transparent);
+}
+.newLine::after { flex: 0 0 18px; }
+
+/* ── one row per message, Discord-style ──
+   gutter (avatar on a run's first row, the time on hover after that) |
+   content (name + time on the first row, the text, reactions). Your own
+   runs are the same, mirrored: gutter on the right, text right-aligned. */
+.group { display: flex; flex-direction: column; }
+
+.row {
+  --gutter: 56px;
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--gutter) minmax(0, 1fr);
+  padding: 3px 12px;
+  border-radius: 10px;
+  transition: background 0.12s ease;
+}
+.row:hover { background: rgba(255, 255, 255, 0.03); }
+.rowFirst { margin-top: 12px; padding-top: 6px; }
+
+.mine .row { grid-template-columns: minmax(0, 1fr) var(--gutter); }
+.gutter, .content { grid-row: 1; }
+.mine .gutter { grid-column: 2; }
+.mine .content { grid-column: 1; align-items: flex-end; text-align: right; }
+/* a reply: the quote line on top, across the row; the message below it */
+.rowReply .gutter, .rowReply .content { grid-row: 2; }
+
+/* a message that @mentions you or replies to you: tinted, like a ping */
+.rowForMe,
+.rowForMe:hover {
+  background: rgba(240, 178, 50, 0.07);
+  box-shadow: inset 2px 0 0 #f0b232;
+}
+.rowForMe:hover { background: rgba(240, 178, 50, 0.1); }
+
+/* the message you're replying to / editing in the bar */
+.rowActive,
+.rowActive:hover {
+  background: color-mix(in srgb, var(--a) 8%, transparent);
+  box-shadow: inset 2px 0 0 var(--a);
+}
+.mine .rowActive { box-shadow: inset -2px 0 0 var(--a); }
+
+/* jumping to a quoted message: a brief glow */
+.flash { animation: rowFlash 1.8s ease; }
+@keyframes rowFlash {
+  0%, 35% { background: color-mix(in srgb, var(--a) 18%, transparent); }
+  100% { background: transparent; }
+}
+
+.gutter { display: flex; justify-content: flex-start; min-width: 0; }
+.gutter .avatar {
+  width: 40px;
+  height: 40px;
+  font-size: 15px;
+  margin-top: 1px;
+  /* ringed in the person's colour, glowing while their row is hovered */
+  border: 2px solid color-mix(in srgb, var(--nc, #8b949e) 55%, transparent);
+}
+.row:hover .gutter .avatar { border-color: var(--nc); box-shadow: 0 0 12px color-mix(in srgb, var(--nc) 35%, transparent); }
+.mine .gutter { justify-content: flex-end; }
+.gutterTime {
+  width: 100%;
+  padding: 0 10px 0 0;
+  box-sizing: border-box;
+  text-align: left;
+  font-size: 10.5px;
+  line-height: 22px;
+  color: #6e7681;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.mine .gutterTime { text-align: right; padding: 0 0 0 10px; }
+.row:hover .gutterTime { opacity: 1; }
+
+.content {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  container-type: inline-size; /* the bar's placement follows its width */
+}
+
+/* The message itself (header, text, reactions), as wide as its text. The
+   hover bar is placed just outside it, so it's always next to what you're
+   pointing at and never over another message. Room is kept beside it. */
+.box {
+  position: relative;
+  min-width: 0;
+  max-width: calc(100% - 250px);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+.mine .box { align-items: flex-end; }
+
+.head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.mine .head { flex-direction: row-reverse; }
+.name {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--a);
+  text-decoration: none;
+  white-space: nowrap;
+}
+a.name:hover { text-decoration: underline; }
+.time { font-size: 11px; color: #6e7681; white-space: nowrap; }
+
+.text {
+  max-width: 100%;
+  font-size: 15px;
+  line-height: 1.5;
+  color: #d0d7de;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.deleted { font-style: italic; color: #6e7681; }
+.edited { font-size: 11px; color: #6e7681; }
+
+/* the quoted message, above a reply: a line from it into the avatar below */
+.replyRef {
+  all: unset;
+  box-sizing: border-box;
+  cursor: pointer;
+  grid-column: 1 / -1;
+  grid-row: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin-bottom: 2px;
+  padding-left: var(--gutter);
+  font-size: 13px;
+  color: #8b949e;
+  white-space: nowrap;
+}
+/* the line from the quote down into the avatar */
+.replyRef::before {
+  content: "";
+  position: absolute;
+  left: 19px;
+  top: 50%;
+  width: calc(var(--gutter) - 26px);
+  height: 12px;
+  border-left: 2px solid rgba(255, 255, 255, 0.14);
+  border-top: 2px solid rgba(255, 255, 255, 0.14);
+  border-top-left-radius: 6px;
+  box-sizing: border-box;
+}
+.replyRef:hover .replyText { color: #e6edf3; }
+.replyRef:focus-visible { outline: 2px solid var(--a); outline-offset: 2px; border-radius: 4px; }
+.replyName { flex: none; font-weight: 600; }
+.replyText { min-width: 0; overflow: hidden; text-overflow: ellipsis; transition: color 0.12s ease; }
+.mine .replyRef {
+  flex-direction: row-reverse;
+  padding-left: 0;
+  padding-right: var(--gutter);
+}
+.mine .replyRef::before {
+  left: auto;
+  right: 19px;
+  border-left: none;
+  border-right: 2px solid rgba(255, 255, 255, 0.14);
+  border-top-left-radius: 0;
+  border-top-right-radius: 6px;
+}
+
+/* @username: a chip in the accent */
+.mention {
+  color: var(--a);
+  font-weight: 600;
+  text-decoration: none;
+  border-radius: 5px;
+  padding: 0 4px;
+  background: color-mix(in srgb, var(--a) 12%, transparent);
+  transition: background 0.15s ease;
+}
+.mention:hover { background: color-mix(in srgb, var(--a) 24%, transparent); }
+
+/* a spoiler message: a grey bar until clicked; then the text shows on the
+   same bar (fading in), so it still reads as a spoiler */
+.spoiler {
+  cursor: pointer;
+  border-radius: 5px;
+  padding: 1px 6px;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  color: transparent;
+  background: #30363d;
+  transition: background 0.2s ease, color 0.35s ease;
+}
+.spoiler * { pointer-events: none; color: transparent !important; background: transparent !important; }
+.spoiler:hover { background: #3d444d; }
+.spoiler:focus-visible { outline: 2px solid var(--a); outline-offset: 1px; }
+.spoilerShown {
+  cursor: text;
+  color: #e6edf3;
+  background: #30363d;
+}
+.spoilerShown * { pointer-events: auto; color: inherit !important; }
+.spoilerShown .mention { color: var(--a) !important; background: color-mix(in srgb, var(--a) 12%, transparent) !important; }
+.spoilerShown:hover { background: #30363d; }
+
+/* reactions under a message */
+.reactions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+.mine .reactions { justify-content: flex-end; }
+.reaction {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  padding: 2px 10px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  font-size: 15px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.reaction span { font-size: 12.5px; font-weight: 700; color: #b5bac1; }
+.reaction:hover { border-color: rgba(255, 255, 255, 0.2); }
+.reaction:focus-visible { outline: 2px solid var(--a); outline-offset: 1px; }
+.reactionMine {
+  border-color: color-mix(in srgb, var(--a) 70%, transparent);
+  background: color-mix(in srgb, var(--a) 14%, transparent);
+}
+.reactionMine span { color: var(--a); }
+/* others' reactions: a count, not a button */
+span.reaction { cursor: default; }
+span.reaction:hover { border-color: rgba(255, 255, 255, 0.08); }
+/* yours: clicking takes it off */
+button.reactionMine:hover {
+  border-color: var(--con, #f85149);
+  background: color-mix(in srgb, var(--con, #f85149) 14%, transparent);
+}
+button.reactionMine:hover span { color: var(--con, #f85149); }
+
+/* the hover bar: quick reactions, more, edit, reply, delete.
+   It sits just outside the message box (to its right, or left for your
+   own), at its top: next to the message, never over another one. (Hanging
+   over the row above, as it once did, it covered that message's reaction
+   chips and took their clicks.) */
+.tools {
+  position: absolute;
+  top: -2px;
+  left: calc(100% + 12px);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding: 3px;
+  border-radius: 10px;
+  background: #0a0d13;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 8px 22px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+.mine .tools { left: auto; right: calc(100% + 12px); }
+/* Shown while hovered, while the picker is open, or while a keyboard user is
+   on one of its buttons. Not on mere focus: a clicked button keeps focus,
+   and the bar then stayed up over other messages after the mouse left. */
+.row:hover .tools,
+.row:has(.tools :focus-visible) .tools,
+.toolsOpen {
+  opacity: 1;
+  pointer-events: auto;
+}
+.tools > button {
+  all: unset;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 26px;
+  border-radius: 7px;
+  color: #b5bac1;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.tools > button:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
+.tools > button:focus-visible { outline: 2px solid var(--a); outline-offset: 1px; }
+.tools > .toolDanger:hover { color: var(--con, #f85149); }
+.tools > .toolEmoji { font-size: 17px; }
+.tools > .toolEmoji:hover { transform: scale(1.12); }
+.toolSep { width: 1px; height: 18px; margin: 0 3px; background: rgba(255, 255, 255, 0.1); }
+
+/* "looking for group" card: a wide card with the review cards' glowing edge */
+.boxWide { width: min(620px, calc(100% - 250px)); }
+.mine .boxWide { align-items: stretch; }
+.lfg {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 14px 18px 14px 22px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #07090d 0%, #0a0d13 100%);
+  border: 1px solid color-mix(in srgb, #a371f7 45%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 0 20px rgba(163, 113, 247, 0.1);
+}
+.lfg::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 14px;
+  bottom: 14px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: #a371f7;
+  box-shadow: 0 0 12px rgba(163, 113, 247, 0.7);
+}
+.lfgHead { display: flex; align-items: center; gap: 8px; color: #a371f7; }
+.lfgTitle {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.lfgPlatform {
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #c9d1d9;
+  background: rgba(255, 255, 255, 0.06);
+}
+.lfgSlots { margin-left: auto; font-size: 13px; font-weight: 800; color: #e6edf3; }
+.lfgNote {
+  margin: 8px 0 10px;
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: #d7dde3;
+  white-space: pre-wrap;
+  word-break: break-word;
+  text-align: left;
+}
+.lfgFoot { display: flex; align-items: center; gap: 10px; }
+.lfgFaces { flex: 1; min-width: 0; display: flex; align-items: center; }
+.lfgFaces .avatar + .avatar { margin-left: -6px; }
+.lfgFaces .note { margin: 0; }
+.lfgMine { font-size: 12px; font-weight: 600; color: #8b949e; }
+.lfgBtn {
+  all: unset;
+  cursor: pointer;
+  padding: 5px 16px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #a371f7;
+  border: 1.5px solid color-mix(in srgb, #a371f7 70%, transparent);
+  background: rgba(163, 113, 247, 0.1);
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+.lfgBtn:hover:not(:disabled) { background: rgba(163, 113, 247, 0.2); box-shadow: 0 0 14px rgba(163, 113, 247, 0.3); }
+.lfgBtn:focus-visible { outline: 2px solid #a371f7; outline-offset: 2px; }
+.lfgBtn:disabled { cursor: default; opacity: 0.5; }
+.lfgLeave { color: #8b949e; border-color: rgba(255, 255, 255, 0.18); background: transparent; }
+.lfgLeave:hover:not(:disabled) { color: var(--con, #f85149); border-color: var(--con, #f85149); background: rgba(248, 81, 73, 0.08); box-shadow: none; }
+
+/* someone is typing */
+.typing {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 4px 68px;
+  font-size: 12.5px;
+  color: #8b949e;
+}
+.typingDots { display: inline-flex; gap: 3px; }
+.typingDots i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--a);
+  opacity: 0.4;
+  animation: typingDot 1.2s infinite ease-in-out;
+}
+.typingDots i:nth-child(2) { animation-delay: 0.15s; }
+.typingDots i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes typingDot {
+  0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
+  30% { opacity: 1; transform: translateY(-3px); }
+}
+
+/* "↓ 3 new messages" over the bottom of the list */
+.jumpPill {
+  all: unset;
+  cursor: pointer;
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0a0d13;
+  background: var(--accent, #d4956e);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45), 0 0 18px color-mix(in srgb, var(--accent, #d4956e) 40%, transparent);
+}
+.jumpPill:hover { filter: brightness(1.08); }
+.jumpPill:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+.avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex: none;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  font-size: 13px;
+  font-weight: 700;
+  color: #e6edf3;
+  background: #05070a;
+  border: 1.5px solid rgba(255, 255, 255, 0.14);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.avatarSmall { width: 26px; height: 26px; font-size: 11px; }
+.avatarTiny { width: 16px; height: 16px; font-size: 8px; border-width: 1px; }
+
+.spin { animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+
+@container (max-width: 640px) {
+  .box { max-width: 100%; }
+  .boxWide { width: 100%; }
+  .tools { left: auto; right: 0; top: 0; }
+  .mine .tools { right: auto; left: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .typingDots i, .flash { animation: none; }
+}

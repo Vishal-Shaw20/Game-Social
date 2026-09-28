@@ -1,0 +1,126 @@
+/* Same page frame as the homepage (HomePage.module.css): --page-pad is the
+   side gutter the footer and cards line up with. */
+.page {
+  --page-pad: 75px;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 56px var(--page-pad) 0;
+  color: #e5e7eb;
+}
+
+.header {
+  margin-bottom: 28px;
+}
+
+.title {
+  margin: 0;
+  font-size: clamp(24px, 2.2vw, 34px);
+  font-weight: var(--weight-bold);
+  line-height: 1.25;
+  color: var(--color-text-primary);
+}
+
+.query {
+  color: #fff;
+}
+
+.hint {
+  margin: 10px 0 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-tertiary);
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+/* Same tag as the genres on the cards. */
+.filterTag {
+  padding: 3px 7px;
+  border-radius: var(--radius-md, 8px);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  line-height: 1.3;
+  color: var(--color-text-primary);
+  background: rgba(5, 7, 12, 0.55);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.14) inset;
+}
+
+/* Platform filters, below the genres, as the same logos the cards use. */
+.platforms {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0 0;
+  /* Indented by the tag's side padding (.filterTag: 7px) so the first logo
+     lines up with the genre text; the tag's own outline is too faint to
+     read as the edge. */
+  padding: 0 0 0 7px;
+  list-style: none;
+}
+
+.platforms li {
+  display: flex;
+  color: rgba(241, 245, 249, 0.82);
+}
+
+/* Extra space only after tags; with none (a text-only search) the count
+   starts flush with the heading. */
+.filterTag + .count {
+  margin-left: 6px;
+}
+
+.count {
+  font-size: var(--text-sm);
+  color: var(--color-text-tertiary);
+}
+
+/* Cards size to the column instead of the carousel's fixed --card-w. */
+.grid {
+  --card-w: 100%;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 28px 16px;
+}
+
+.empty,
+.loading {
+  margin: 24px 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-tertiary);
+}
+
+.error {
+  color: #f87171;
+}
+
+.endMarker {
+  height: 1px;
+  margin-top: -1px;
+}
+
+/* At least a full screen tall, so the footer always starts below the fold,
+   even with no results. The search dock hides once the footer is scrolled
+   into view; if a short results page let the footer show on load, the dock
+   would vanish before the user could change the search. */
+.results {
+  flex: 1 0 auto;
+  min-height: 100vh;
+}
+
+@media (max-width: 768px) {
+  .page {
+    --page-pad: 16px;
+    /* Clear of the fixed left sidebar rail. */
+    padding-left: 72px;
+  }
+
+  .grid {
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  }
+}

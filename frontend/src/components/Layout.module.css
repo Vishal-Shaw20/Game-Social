@@ -7,18 +7,22 @@ body {
   background: #05070c;
 }
 
+/* The background glow. Soft by its gradients alone: it used to be run
+   through filter: blur(70px) saturate() brightness() at 140% of the screen,
+   the heaviest thing on every page for the GPU, and a likely part of the
+   game page's "stale, doubled strip" glitch in Chrome. The wider fades and
+   slightly stronger colours stand in for the blur and the colour boost. */
 .auroraBg {
   position: fixed;
-  inset: -20%;
+  inset: 0;
   z-index: 0;
   pointer-events: none;
   background:
-    radial-gradient(55% 38% at 12% 18%, rgba(80, 190, 255, 0.32), transparent 60%),
-    radial-gradient(48% 34% at 78% 12%, rgba(120, 110, 255, 0.30), transparent 58%),
-    radial-gradient(42% 30% at 28% 82%, rgba(60, 230, 150, 0.24), transparent 58%),
-    radial-gradient(38% 28% at 88% 72%, rgba(200, 120, 255, 0.26), transparent 56%),
-    radial-gradient(30% 22% at 50% 50%, rgba(120, 160, 255, 0.12), transparent 60%);
-  filter: blur(70px) saturate(120%) brightness(1.08);
+    radial-gradient(62% 46% at 16% 22%, rgba(88, 196, 255, 0.30), rgba(88, 196, 255, 0.12) 38%, transparent 72%),
+    radial-gradient(54% 42% at 76% 16%, rgba(128, 116, 255, 0.28), rgba(128, 116, 255, 0.11) 38%, transparent 70%),
+    radial-gradient(50% 38% at 30% 80%, rgba(64, 236, 156, 0.22), rgba(64, 236, 156, 0.09) 38%, transparent 70%),
+    radial-gradient(46% 36% at 86% 72%, rgba(208, 126, 255, 0.25), rgba(208, 126, 255, 0.10) 38%, transparent 70%),
+    radial-gradient(36% 28% at 50% 50%, rgba(126, 166, 255, 0.11), transparent 72%);
 }
 
 .leftFloatZone {
@@ -87,20 +91,33 @@ body {
 .mainScrollable {
   height: 100vh;
   overflow-y: auto;
-  padding: 24px;
+  /* No padding: routes get the whole viewport and own their internal
+     spacing. Every page already sets its own (or centres itself with
+     max-width), so nothing here relies on the shell for breathing room. */
+  padding: 0;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
   gap: 24px;
+  /* Scroll on the compositor. The scroller is see-through (the shell's
+     background shows behind it), and on a 1x display Chrome scrolls a
+     see-through box on the main thread to keep LCD text; the page's own
+     layers (carousel rows, hero art, card images) then land a frame late
+     and slide over the text around them mid-scroll. */
+  will-change: scroll-position;
+}
+
+/* The page scrolls, but its scrollbar is never drawn: the shell is
+   full-bleed (the hero and the carousels run to the edges), so a bar down
+   the right-hand side cuts into the artwork. Wheel, touch, keyboard and the
+   carousels' own scrolling are untouched; only the bar is hidden. */
+.mainScrollable {
+  scrollbar-width: none;         /* Firefox */
+  -ms-overflow-style: none;      /* old Edge */
 }
 
 .mainScrollable::-webkit-scrollbar {
-  width: 8px;
-}
-
-.mainScrollable::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.25);
-  border-radius: 4px;
+  display: none;                 /* Chrome, Edge, Safari */
 }
 
 @media (max-width: 768px) {
@@ -110,9 +127,5 @@ body {
 
   .leftFloatZone {
     width: 100%;
-  }
-
-  .mainScrollable {
-    padding: 16px;
   }
 }

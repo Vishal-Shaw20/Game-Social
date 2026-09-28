@@ -1,0 +1,989 @@
+/* Game page bottom dock (GameDock.jsx): a full-window bar, a third of the
+   screen tall, with the modal tucked in behind its top edge. Glass as in the
+   homepage search dock (GameSearch.module.css). */
+
+.root {
+  /* --bar-h and --i (0 reviews, 1 chat) are set inline by GameDock, and
+     --verdict when a verdict is picked in the composer.
+
+     --accent is the dock's highlight colour: the picked verdict's colour on
+     the reviews side, the warm accent (the Trending pager's colour) with no verdict
+     and on the chat side. It mixes by --i, so it cross-fades live while
+     swiping or dragging. */
+  --base: #d4956e;
+  --pro: #2ea043;  /* "what worked": always green */
+  --con: #f85149;  /* "what didn't": always red */
+  --accent: color-mix(in srgb, var(--verdict, var(--base)) calc((1 - var(--i, 0)) * 100%), var(--base));
+  --swipe: 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+  --edge: rgba(255, 255, 255, 0.1);
+  --tuck: 22px; /* how far the modal slides in under the bar */
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  /* Rendered straight into <body> (GameDetails portals it, keeping it out of
+     the page's scroller). Above the page (Layout's main area is 10), under
+     the left nav rail (50) and SidebarRight (60), as it was when it lived
+     inside the page: the modal passes behind both. */
+  z-index: 40;
+  color: #e6edf3;
+  pointer-events: none; /* only the bar and the open modal take the mouse */
+}
+
+/* ───────── BAR ───────── */
+.bar {
+  position: relative;
+  z-index: 2;
+  height: var(--bar-h);
+  display: flex;
+  gap: 16px;
+  /* right padding clears the notification rail's 32px strip */
+  padding: var(--pad-y, 18px) 56px var(--pad-y, 18px) 28px;
+  box-sizing: border-box;
+  /* Solid, no backdrop-filter: a blurred layer fixed over the scrolling
+     page is what Chrome smears stale copies of the page through (the
+     "ghosted text" bug). */
+  background: rgba(12, 16, 26, 0.95);
+  border-top: 1px solid var(--edge);
+  border-radius: 26px 26px 0 0;
+  box-shadow: 0 -18px 50px rgba(0, 0, 0, 0.5);
+  pointer-events: auto;
+}
+
+.barTrackWrap {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  /* Clipped only while the swipe runs (.swiping); at rest the inactive face
+     is invisible anyway, and the @mention dropdown can open above the bar.
+     clip, not hidden: a hidden box can still be scrolled by focus(). */
+  overflow: visible;
+}
+.swiping .barTrackWrap { overflow: clip; }
+
+/* The two bar faces stacked; --i swipes between them vertically. The track
+   is twice the bar's height: on the chat side it's slid up, so its top half
+   (the hidden reviews face) sits above the bar, over the bottom of the
+   modal. It must not take the mouse there, or that whole band of the modal
+   goes dead (no hover, no clicks); only the active face does. */
+.barTrack {
+  height: 200%;
+  display: flex;
+  flex-direction: column;
+  transform: translateY(calc(var(--i, 0) * -50%));
+  transition: transform var(--swipe);
+  pointer-events: none;
+}
+
+/* Each face's opacity follows the swipe position (--i: 0 reviews .. 1 chat)
+   on the same curve as the slide, so mid-swipe, including mid-drag, both
+   faces show and cross-fade. Only at rest is the inactive one dropped. */
+.barPane {
+  flex: 0 0 50%;
+  min-height: 0;
+  transition: opacity var(--swipe);
+  pointer-events: auto;
+}
+/* the face being left (mid-swipe) doesn't take clicks either */
+.barPane[inert] { pointer-events: none; }
+.barPane:first-child { opacity: calc(1 - var(--i, 0)); }
+.barPane:last-child { opacity: var(--i, 0); }
+.root:not(.swiping):not(.dragging) .barPane[inert] { visibility: hidden; }
+
+/* columns inside the bar */
+.col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.colLabel {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8b949e;
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  min-width: 0;
+}
+
+/* ── review composer ── */
+.composer {
+  height: 100%;
+  display: grid;
+  grid-template-columns: 230px minmax(280px, 1fr) minmax(260px, 400px);
+  gap: 24px;
+}
+
+/* One below the other, sharing the column's height whatever the dock's. */
+.verdicts {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.verdictBtn {
+  all: unset;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 0;
+  min-height: 0;
+  max-height: 46px;
+  padding: 0 16px;
+  border-radius: 12px;
+  font-size: 15px;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  font-weight: 600;
+  color: var(--c);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+.verdictBtn:hover { background: rgba(255, 255, 255, 0.08); }
+.verdictOn {
+  color: #fff;
+  border-color: var(--c);
+  background: color-mix(in srgb, var(--c) 28%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--c) 30%, transparent);
+}
+.verdictBtn:focus-visible { outline: 2px solid #58a6ff; outline-offset: 2px; }
+
+/* The writing box: near-black, with the textarea and a footer (finished
+   checkbox + Post) inside one frame. */
+.textCol { min-height: 0; }
+
+.writeBox {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, #06080c, #0a0d13);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 16px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 10px 30px rgba(0, 0, 0, 0.35);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.writeBox:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 0 0 3px color-mix(in srgb, var(--accent) 8%, transparent), 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+/* MentionInput's wrapper + textarea: fill the box, no frame of their own. */
+.writeBox > div:first-child { flex: 1 1 auto; min-height: 0; display: flex; }
+.writeBox textarea {
+  flex: 1;
+  min-height: 24px;
+  resize: none;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 14px 18px 6px;
+  font-size: 15px;
+  line-height: 1.55;
+  color: #e6edf3;
+}
+.writeBox textarea:focus { box-shadow: none; border: none; }
+
+.writeFoot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px 10px 18px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+.footSpacer { flex: 1; }
+
+.cancelLink {
+  all: unset;
+  cursor: pointer;
+  font-size: 13px;
+  color: #8b949e;
+}
+.cancelLink:hover { color: #e6edf3; }
+
+.tagsCol { min-height: 0; }
+
+.tagTabs {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.tagTab {
+  all: unset;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 2px 0 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8b949e;
+  transition: color 0.25s ease;
+}
+.tagTab:hover, .tagTabOn { color: #e6edf3; }
+.tagTab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+/* underline under the active tab */
+.tagTabBar {
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  width: 50%;
+  height: 2px;
+  /* Not an accent element: green under "What worked", red under "What
+     didn't" (the chip colours), fading as it slides. */
+  background: color-mix(in srgb, var(--pro) calc((1 - var(--t, 0)) * 100%), var(--con));
+  transform: translateX(calc(var(--t, 0) * 100%));
+  transition: transform var(--swipe), background-color 0.35s ease;
+}
+
+.countPro, .countCon {
+  min-width: 16px;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 10px;
+  line-height: 16px;
+  letter-spacing: 0;
+  text-align: center;
+}
+.countPro { background: rgba(46, 160, 67, 0.35); color: #aff5b4; }
+.countCon { background: rgba(248, 81, 73, 0.3); color: #ffc1ba; }
+
+.tagViewport {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: clip;
+}
+
+.tagTrack {
+  height: 200%;
+  display: flex;
+  flex-direction: column;
+  transform: translateY(calc(var(--t, 0) * -50%));
+  transition: transform var(--swipe);
+}
+
+.tagPanel {
+  flex: 0 0 50%;
+  min-height: 0;
+  position: relative; /* holds the ScrollRail beside .tagScroll */
+  transition: opacity 0.35s ease;
+}
+/* Each panel's scrollbar takes its side's colour, not the dock accent. */
+.tagPanel:first-child { --accent: var(--pro); }
+.tagPanel:last-child { --accent: var(--con); }
+.tagScroll {
+  height: 100%;
+  overflow-y: auto;
+  padding: 2px 16px 0 0;
+  box-sizing: border-box;
+}
+.tagPanel[inert] { opacity: 0; }
+
+.tagChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.tagChip {
+  all: unset;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #c9d1d9;
+}
+.tagChip:hover { background: rgba(255, 255, 255, 0.1); }
+.proOn { background: rgba(46, 160, 67, 0.25); border-color: var(--pro); color: #aff5b4; }
+.conOn { background: rgba(248, 81, 73, 0.22); border-color: var(--con); color: #ffc1ba; }
+
+.actionsCol { justify-content: flex-end; }
+
+.finished {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #c9d1d9;
+  cursor: pointer;
+}
+.finished { white-space: nowrap; }
+.finished input { accent-color: #2ea043; width: auto; flex: none; margin: 0; }
+
+.submitBtn {
+  /* Hollow, like the verdict buttons, and an accent element: the warm accent, or the
+     picked verdict's colour (--accent). */
+  all: unset;
+  cursor: pointer;
+  text-align: center;
+  padding: 7px 22px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border: 1.5px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, color 0.2s ease;
+}
+.submitBtn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  border-color: var(--accent);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.submitBtn:active:not(:disabled) { background: color-mix(in srgb, var(--accent) 28%, transparent); }
+.submitBtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.submitBtn:disabled {
+  cursor: default;
+  color: rgba(255, 255, 255, 0.3);
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+/* the chat bar's Send: text, then an arrow that nudges forward on hover */
+.writeFoot .submitBtn { display: inline-flex; align-items: center; gap: 8px; padding: 7px 18px 7px 20px; }
+.sendIcon { flex: none; transition: transform 0.2s ease; }
+.submitBtn:hover:not(:disabled) .sendIcon { transform: translateX(2px); }
+.writeFoot .hint, .writeFoot .error { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+
+/* ── chat bar: laid out like the review composer ──
+   The writing box, with the voice call on the left when voice is on (like
+   the verdict column). Who's in the room is in the modal. */
+.chatBar {
+  height: 100%;
+  display: grid;
+  grid-template-columns: 230px minmax(280px, 1fr);
+  gap: 24px;
+}
+.chatBarSolo { grid-template-columns: minmax(0, 1fr); }
+
+/* The voice column: the verdict column's buttons (.verdicts/.verdictBtn),
+   with the call's status in its label. */
+.voiceLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.voiceLabel time { font-variant-numeric: tabular-nums; color: #c9d1d9; }
+.voiceDot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #484f58;
+}
+.voiceDotLive {
+  background: #3fb950;
+  box-shadow: 0 0 0 3px rgba(63, 185, 80, 0.2), 0 0 8px rgba(63, 185, 80, 0.6);
+}
+.voiceError { margin: 6px 0 0; font-size: 12px; color: var(--con); }
+/* push to talk: the button, with its settings gear inside at the right */
+.pttWrap {
+  position: relative;
+  flex: 1 1 0;
+  min-height: 0;
+  max-height: 46px;
+  display: flex;
+}
+.pttWrap > .verdictBtn { flex: 1; max-height: none; padding-right: 46px; }
+.pttGear {
+  all: unset;
+  cursor: pointer;
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  color: #8b949e;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.pttGear svg { transition: transform 0.3s ease; }
+.pttGear:hover,
+.pttGearOn { color: #d4956e; background: rgba(212, 149, 110, 0.12); }
+.pttGear:hover svg,
+.pttGearOn svg { transform: rotate(45deg); }
+.pttGear:focus-visible { outline: 2px solid #d4956e; outline-offset: 1px; }
+
+/* its panel (portalled to the page, above the gear) */
+.pttPanel {
+  position: fixed;
+  z-index: 1000;
+  box-sizing: border-box;
+  padding: 12px 16px 14px;
+  border-radius: 16px;
+  color: #e6edf3;
+  background: linear-gradient(180deg, #07090d 0%, #0a0d13 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 18px 50px rgba(0, 0, 0, 0.6), 0 0 24px rgba(212, 149, 110, 0.06);
+  animation: pttIn 0.14s ease;
+}
+@keyframes pttIn { from { opacity: 0; transform: translateY(6px); } }
+.pttHead { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; color: #d4956e; }
+.pttTitle {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8b949e;
+}
+.pttClose {
+  all: unset;
+  cursor: pointer;
+  margin-left: auto;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  color: #8b949e;
+}
+.pttClose:hover { color: #e6edf3; background: rgba(255, 255, 255, 0.08); }
+.pttRow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.pttRow:last-of-type { padding-bottom: 2px; }
+.pttText { flex: 1; min-width: 0; }
+.pttLabel { font-size: 13.5px; font-weight: 600; color: #e6edf3; }
+.pttHint { margin-top: 2px; font-size: 12px; line-height: 1.4; color: #6e7681; }
+/* the shortcut, as a keycap */
+.pttKey {
+  all: unset;
+  cursor: pointer;
+  flex: none;
+  min-width: 44px;
+  padding: 5px 12px;
+  box-sizing: border-box;
+  text-align: center;
+  border-radius: 8px;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 13px;
+  font-weight: 700;
+  color: #d4956e;
+  background: rgba(212, 149, 110, 0.08);
+  border: 1.5px solid rgba(212, 149, 110, 0.45);
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.35);
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+.pttKey:hover { background: rgba(212, 149, 110, 0.16); }
+.pttKey:focus-visible { outline: 2px solid #d4956e; outline-offset: 2px; }
+.pttKeyBinding {
+  font-family: inherit;
+  font-weight: 600;
+  animation: pttBind 1.2s ease-in-out infinite;
+}
+@keyframes pttBind {
+  50% { box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.35), 0 0 14px rgba(212, 149, 110, 0.45); }
+}
+/* the release delay, as segments */
+.pttSeg { display: flex; gap: 4px; margin-top: 10px; }
+.pttSeg button {
+  all: unset;
+  cursor: pointer;
+  flex: 1;
+  padding: 5px 0;
+  text-align: center;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #8b949e;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.pttSeg button:hover { background: rgba(255, 255, 255, 0.08); }
+.pttSeg button:focus-visible { outline: 2px solid #d4956e; outline-offset: 1px; }
+.pttSeg .pttSegOn {
+  color: #fff;
+  border-color: #d4956e;
+  background: rgba(212, 149, 110, 0.2);
+}
+/* sound cues: a switch */
+.pttSwitch {
+  all: unset;
+  cursor: pointer;
+  position: relative;
+  flex: none;
+  width: 38px;
+  height: 22px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+.pttSwitch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #8b949e;
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+.pttSwitchOn { background: rgba(212, 149, 110, 0.22); border-color: #d4956e; }
+.pttSwitchOn::after { transform: translateX(16px); background: #d4956e; }
+.pttSwitch:focus-visible { outline: 2px solid #d4956e; outline-offset: 2px; }
+.pttNote { margin: 12px 0 0; font-size: 12px; line-height: 1.4; color: #8b949e; }
+
+/* mute / deafen / push-to-talk before you've joined */
+.verdictBtn:disabled { cursor: default; opacity: 0.4; }
+.verdictBtn:disabled:hover { background: rgba(255, 255, 255, 0.04); }
+
+/* the chat box's MentionInput fills what the strips above it leave */
+.chatBar .writeBox > div:not(.composeNote):not(.lfgOptions):not(.writeFoot) {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+}
+
+/* Replying to / editing: a strip at the top of the writing box */
+.writeBox > div.composeNote {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 8px 0;
+  padding: 6px 6px 6px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  color: #8b949e;
+  background: rgba(255, 255, 255, 0.04);
+  border-left: 2px solid var(--accent);
+}
+.composeNote > svg { flex: none; color: var(--accent); }
+.composeText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.composeText b { color: #e6edf3; font-weight: 700; }
+.composeExcerpt { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: #6e7681; }
+.composeX {
+  all: unset;
+  cursor: pointer;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  color: #8b949e;
+}
+.composeX:hover { background: rgba(255, 255, 255, 0.08); color: #e6edf3; }
+.composeX:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* "Looking for group": platform chips and how many players, above the box */
+.writeBox > div.lfgOptions,
+.writeBox > div.composeNote + div.lfgOptions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin: 8px 8px 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(163, 113, 247, 0.06);
+  border: 1px solid rgba(163, 113, 247, 0.25);
+}
+/* group mode off: the row stays, greyed and not clickable */
+.writeBox > div.lfgOptionsOff {
+  opacity: 0.4;
+  filter: grayscale(1);
+  background: rgba(255, 255, 255, 0.02);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+.lfgPlatforms { display: flex; flex-wrap: wrap; gap: 4px; }
+.lfgChip {
+  all: unset;
+  cursor: pointer;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #8b949e;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.lfgChip:hover { color: #e6edf3; background: rgba(255, 255, 255, 0.05); }
+.lfgChip:focus-visible { outline: 2px solid #a371f7; outline-offset: 1px; }
+.lfgChipOn { color: #e6d8ff; border-color: #a371f7; background: rgba(163, 113, 247, 0.18); }
+.lfgSlots {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #8b949e;
+}
+.lfgSlots b { color: #e6edf3; }
+.lfgSlots button {
+  all: unset;
+  cursor: pointer;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #c9d1d9;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.lfgSlots button:hover:not(:disabled) { background: rgba(255, 255, 255, 0.06); }
+.lfgSlots button:disabled { cursor: default; opacity: 0.35; }
+.lfgSlots button:focus-visible { outline: 2px solid #a371f7; outline-offset: 1px; }
+
+/* the "Group" switch in the box's footer */
+.lfgToggle {
+  all: unset;
+  cursor: pointer;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #8b949e;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.lfgToggle:hover:not(:disabled) { color: #e6edf3; background: rgba(255, 255, 255, 0.05); }
+.lfgToggle:disabled { cursor: default; opacity: 0.4; }
+.lfgToggle:focus-visible { outline: 2px solid #a371f7; outline-offset: 1px; }
+.lfgToggleOn { color: #e6d8ff; border-color: #a371f7; background: rgba(163, 113, 247, 0.18); }
+.spoilerToggleOn { color: #ffe2a8; border-color: #d29922; background: rgba(210, 153, 34, 0.16); }
+
+.writeFoot .submitBtn { display: inline-flex; align-items: center; gap: 6px; }
+
+.spin { animation: dockSpin 0.9s linear infinite; }
+@keyframes dockSpin { to { transform: rotate(360deg); } }
+
+/* ── shared bits ── */
+.hint { font-size: 12px; color: #6e7681; }
+.error, .errorInline { color: #f85149; font-size: 12px; }
+.muted { color: #8b949e; font-size: 13px; }
+
+/* ───────── VERTICAL TOGGLE ─────────
+   "Thick + mark": a track the full height of the bar with a 3px accent
+   border, and a knob (3px ring when hollow) that slides between top
+   (reviews) and bottom (chat), 6px in from the border on every side. A small
+   dot marks the end the knob isn't at, fading as the knob arrives. */
+.toggle {
+  --inset: 6px;
+  flex: none;
+  align-self: stretch;
+  position: relative;
+  width: 84px;
+  touch-action: none; /* the knob is dragged, not the page */
+  cursor: grab;
+  user-select: none;
+  display: flex;
+  flex-direction: column;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 3px solid var(--accent);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 22%, transparent);
+  overflow: hidden;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* The two end marks: a dot centred where the knob would sit. The top one
+   shows while the knob is down (chat), the bottom one while it's up. */
+.toggle::before,
+.toggle::after {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  left: var(--inset);
+  right: var(--inset);
+  aspect-ratio: 1;
+  pointer-events: none;
+  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 75%, transparent) 3px, transparent 3.6px);
+  transition: opacity var(--swipe);
+}
+.toggle::before { top: var(--inset); opacity: var(--i, 0); }
+.toggle::after { bottom: var(--inset); opacity: calc(1 - var(--i, 0)); }
+.dragging .toggle::before,
+.dragging .toggle::after { transition: none; }
+
+.thumb {
+  z-index: 1;
+  margin: 0;
+  padding: 0;
+  border: 3px solid var(--accent);
+  box-sizing: border-box;
+  position: absolute;
+  left: var(--inset);
+  right: var(--inset);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 45%, transparent);
+  pointer-events: none;
+  /* top edge at the top inset, or the knob's bottom at the bottom inset */
+  top: calc(var(--inset) + var(--i, 0) * (100% - 2 * var(--inset)));
+  transform: translateY(calc(var(--i, 0) * -100%));
+  transition: top var(--swipe), transform var(--swipe), background 0.3s ease, box-shadow 0.3s ease;
+}
+.thumb:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+
+/* Hollow: the modal stays closed on hover. A 3px ring (matching the track
+   border) over a faint tint of the accent. */
+.thumbHollow {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.dragging .toggle { cursor: grabbing; }
+
+/* While dragging, everything follows the pointer directly. */
+.dragging .thumb,
+.dragging .barTrack,
+.dragging .track,
+.dragging .barPane,
+.dragging .pane {
+  transition: none;
+}
+.dragging .thumb { box-shadow: 0 0 26px color-mix(in srgb, var(--accent) 70%, transparent); }
+
+.toggleBtn {
+  all: unset;
+  cursor: inherit;
+  flex: 1 1 0;
+  border-radius: 999px;
+  transition: background 0.3s ease;
+}
+.toggleBtn:hover { background: rgba(255, 255, 255, 0.08); }
+.toggleBtn[aria-selected="true"]:hover { background: none; }
+.toggleBtn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* ───────── MODAL ───────── */
+.modal {
+  position: absolute;
+  z-index: 1;
+  /* Truly full width. It passes behind the left nav and the notification
+     rail: Layout stacks both above the whole page, dock included, so their
+     buttons stay on top and usable (moving onto them leaves the dock, which
+     closes the modal). */
+  left: 0;
+  right: 0;
+  /* sits behind the bar's top edge, like a sheet tucked under it */
+  bottom: calc(var(--bar-h) - var(--tuck));
+  height: min(640px, calc(100vh - var(--bar-h) - 48px));
+  overflow: clip;
+  box-sizing: border-box;
+  padding-bottom: var(--tuck);
+  /* No backdrop-filter (see .bar): at this opacity the blur didn't show
+     anyway, and it caused the ghosting. */
+  background: rgba(10, 13, 20, 0.97);
+  border: 1px solid var(--edge);
+  border-bottom: none;
+  border-radius: 22px 22px 0 0;
+  box-shadow: 0 -18px 50px rgba(0, 0, 0, 0.55);
+  opacity: 0;
+  transform: translateY(40px);
+  pointer-events: none;
+  /* Hidden once the close animation ends, so a closed modal isn't
+     composited over the page at all. */
+  visibility: hidden;
+  transition: opacity 0.22s ease, transform 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0s linear 0.35s;
+}
+
+.isOpen .modal {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+  visibility: visible;
+  transition-delay: 0s;
+}
+
+.track {
+  height: 200%;
+  display: flex;
+  flex-direction: column;
+  transform: translateY(calc(var(--i, 0) * -50%));
+  transition: transform var(--swipe);
+}
+
+.pane {
+  flex: 0 0 50%;
+  min-height: 0;
+  position: relative; /* holds the ScrollRail */
+  overflow: hidden;
+  box-sizing: border-box;
+  transition: opacity var(--swipe);
+}
+.paneScroll {
+  height: 100%;
+  overflow-y: auto;
+  /* Clears the left nav rail and the notification strip + scrollbar, which
+     sit over the full-width modal. */
+  padding: 28px 72px 28px 96px;
+  box-sizing: border-box;
+}
+.paneRail { right: 44px; top: 24px; bottom: 24px; } /* left of the notification strip */
+.pane:first-child { opacity: calc(1 - var(--i, 0)); }
+.pane:last-child { opacity: var(--i, 0); }
+.root:not(.swiping):not(.dragging) .pane[inert] { visibility: hidden; }
+
+/* GameReviews brings a page-sized top margin; not wanted here. */
+.paneScroll > div:first-child { margin-top: 0; }
+
+
+/* ───────── COMPACT (short dock, see GameDock COMPACT_BELOW) ───────── */
+.compact { --pad-y: 12px; }
+.compact .bar { gap: 12px; }
+.compact .colLabel { display: none; }
+.compact .col { gap: 6px; }
+.composerCompact { gap: 16px; grid-template-columns: 220px minmax(240px, 1fr) minmax(240px, 380px); }
+.composerCompact .verdicts { gap: 3px; }
+.composerCompact .verdictBtn { padding: 0 12px; font-size: 12.5px; gap: 7px; border-radius: 8px; }
+.composerCompact .verdictBtn svg { width: 14px; height: 14px; }
+.composerCompact .writeBox { border-radius: 12px; }
+.composerCompact .writeBox textarea { padding: 8px 14px 2px; font-size: 14px; }
+.composerCompact .writeFoot { padding: 4px 6px 6px 14px; border-top: none; }
+.composerCompact .submitBtn { padding: 5px 16px; font-size: 13px; }
+.composerCompact .tagChip { padding: 3px 9px; font-size: 11px; }
+.composerCompact .tagTab { padding-bottom: 5px; font-size: 10px; }
+.composerCompact .finished { font-size: 12px; }
+
+.compact .myReview { gap: 4px; }
+.compact .myReviewVerdict { font-size: 16px; }
+.compact .myReviewBody { -webkit-line-clamp: 1; }
+.compact .chatBar { gap: 16px; grid-template-columns: 200px minmax(240px, 1fr); }
+.compact .chatBarSolo { grid-template-columns: minmax(0, 1fr); }
+/* the voice column's buttons: the compact verdict column's corners and spacing, at their own size */
+.compact .chatBar .verdicts { gap: 3px; }
+.compact .chatBar .verdictBtn { border-radius: 8px; }
+.compact .writeBox > div.composeNote,
+.compact .writeBox > div.lfgOptions { margin: 4px 4px 0; padding-top: 4px; padding-bottom: 4px; }
+.compact .chatBar .writeBox { border-radius: 12px; }
+.compact .chatBar .writeBox textarea { padding: 8px 14px 2px; font-size: 14px; }
+.compact .chatBar .writeFoot { padding: 4px 6px 6px 14px; border-top: none; }
+.compact .chatBar .submitBtn { padding: 5px 16px; font-size: 13px; }
+.compact .toggle { width: 68px; --inset: 5px; }
+
+/* ───────── SMALLER SCREENS ───────── */
+@media (max-width: 1280px) {
+  .composer { grid-template-columns: 200px minmax(240px, 1fr) minmax(220px, 320px); gap: 18px; }
+}
+
+@media (max-width: 1024px) {
+  /* composer wraps into two rows and scrolls inside the bar */
+  .composer {
+    height: auto;
+    grid-template-columns: 1fr 1fr;
+  }
+  .textCol { grid-column: 1 / -1; order: -1; }
+  /* too little room at this width: the bar faces scroll */
+  .barPane { overflow-y: auto; scrollbar-width: thin; }
+  .writeBox textarea { min-height: 90px; }
+  .chatBar { grid-template-columns: 1fr; height: auto; }
+  .chatBar .textCol { order: -1; }
+}
+
+@media (max-width: 768px) {
+  .bar { padding: 16px 16px 14px; gap: 10px; border-radius: 20px 20px 0 0; }
+  .toggle { width: 60px; }
+  .paneScroll { padding: 18px 36px 18px 18px; }
+}
+
+@media (max-width: 560px) {
+  .composer { grid-template-columns: 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .barTrack, .track, .thumb, .modal, .tagTrack, .tagTabBar { transition-duration: 0.01s; }
+}
+
+.compact .chatBar .writeFoot .hint { display: none; }
+.verdictBtn svg { flex: none; }
+
+/* ── Auto-save switch (writing box footer) ── */
+.autosave {
+  all: unset;
+  cursor: pointer;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #8b949e;
+  transition: color 0.2s ease;
+}
+.autosave:hover { color: #c9d1d9; }
+.autosave:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 6px; }
+.autosaveOn { color: #e6edf3; }
+
+.switch {
+  position: relative;
+  width: 30px;
+  height: 17px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  transition: background 0.25s ease;
+}
+.switch > span {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #c9d1d9;
+  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1), background 0.25s ease;
+}
+.autosaveOn .switch { background: color-mix(in srgb, var(--accent) 35%, transparent); }
+.autosaveOn .switch > span { transform: translateX(13px); background: var(--accent); }
+
+.writeFoot .hint { display: inline-flex; align-items: center; gap: 5px; }
+
+/* Review tag sections (General, one per genre pack, Multiplayer). */
+.tagSection + .tagSection { margin-top: 10px; }
+.tagSectionTitle {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6e7681;
+  margin: 2px 0 6px;
+}
