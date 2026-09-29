@@ -16,7 +16,7 @@ def _key(game_id: int, k: int, max_per_series: int) -> str:
     return f"rec:{game_id}:{k}:{max_per_series}"
 
 
-def get_cached(game_id: int, k: int, max_per_series: int) -> list[int] | None:
+def get_cached(game_id: int, k: int, max_per_series: int) -> dict | None:
     if _redis is None:
         return None
     try:
@@ -28,7 +28,7 @@ def get_cached(game_id: int, k: int, max_per_series: int) -> list[int] | None:
         return None
 
 
-def set_cached(game_id: int, k: int, max_per_series: int, result: list[int]) -> None:
+def set_cached(game_id: int, k: int, max_per_series: int, result: dict) -> None:
     if _redis is None:
         return
     try:

@@ -2,7 +2,7 @@ from recommender.api import _build_response
 from unittest.mock import patch
 
 
-def mock_recs(game_id, k=50):
+def mock_recs(game_id, k=50, include_scores=False):
     """Return predictable fake IDs: game_id * 1000 + offset."""
     return [game_id * 1000 + i for i in range(k)]
 

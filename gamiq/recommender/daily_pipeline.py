@@ -49,6 +49,37 @@ def extract_platforms(field):
         return []
     return [p["platform"]["name"] for p in field if "platform" in p]
 
+
+def build_game_row(g: dict) -> tuple:
+    return (
+        clean_int(g.get("id")),
+        clean_text(g.get("slug")),
+        clean_text(g.get("name")),
+        clean_text(g.get("name_original")),
+        clean_text(g.get("description")),
+        clean_text(g.get("description_raw")),
+        clean_text(g.get("released")),
+        clean_text(g.get("background_image")),
+        clean_text(g.get("background_image_additional")),
+        clean_int(g.get("suggestions_count")),
+        extract_platforms(g.get("platforms")),
+        extract_names(g.get("developers")),
+        extract_names(g.get("publishers")),
+        extract_names(g.get("genres")),
+        extract_names(g.get("tags")),
+        json.dumps(g.get("esrb_rating")) if g.get("esrb_rating") else None,
+        clean_text(g.get("website")),
+        clean_int(g.get("screenshots_count")),
+        clean_int(g.get("achievements_count")),
+        clean_int(g.get("game_series_count")),
+        clean_int(g.get("additions_count")),
+        clean_int(g.get("parents_count")),
+        extract_names(g.get("alternative_names")),
+        g.get("rating") or 0.0,
+        clean_int(g.get("ratings_count")),
+        clean_int(g.get("metacritic")),
+    )
+
 # ============================================================
 # -------------------- TEXT BUILD ----------------------------
 # ============================================================
@@ -364,36 +395,7 @@ def ensure_game(rawg_id: int) -> dict:
             return {"status": "not_found_on_rawg"}
 
         with conn:
-            game_row = [(
-                clean_int(g.get("id")),
-                clean_text(g.get("slug")),
-                clean_text(g.get("name")),
-                clean_text(g.get("name_original")),
-                clean_text(g.get("description")),
-                clean_text(g.get("description_raw")),
-                clean_text(g.get("released")),
-                clean_text(g.get("background_image")),
-                clean_text(g.get("background_image_additional")),
-                clean_int(g.get("suggestions_count")),
-                extract_platforms(g.get("platforms")),
-                extract_names(g.get("developers")),
-                extract_names(g.get("publishers")),
-                extract_names(g.get("genres")),
-                extract_names(g.get("tags")),
-                json.dumps(g.get("esrb_rating")) if g.get("esrb_rating") else None,
-                clean_text(g.get("website")),
-                clean_int(g.get("screenshots_count")),
-                clean_int(g.get("achievements_count")),
-                clean_int(g.get("game_series_count")),
-                clean_int(g.get("additions_count")),
-                clean_int(g.get("parents_count")),
-                extract_names(g.get("alternative_names")),
-                g.get("rating") or 0.0,
-                clean_int(g.get("ratings_count")),
-                clean_int(g.get("metacritic")),
-            )]
-
-            insert_games_batch(conn, game_row)
+            insert_games_batch(conn, [build_game_row(g)])
 
             text = build_structured_text(g)
             embedding = encode_texts([text])
@@ -464,34 +466,7 @@ def refresh_games(conn, game_ids):
         for gid in chunk_ids:
             g = updated_games[gid]
 
-            game_rows.append((
-                clean_int(g.get("id")),
-                clean_text(g.get("slug")),
-                clean_text(g.get("name")),
-                clean_text(g.get("name_original")),
-                clean_text(g.get("description")),
-                clean_text(g.get("description_raw")),
-                clean_text(g.get("released")),
-                clean_text(g.get("background_image")),
-                clean_text(g.get("background_image_additional")),
-                clean_int(g.get("suggestions_count")),
-                extract_platforms(g.get("platforms")),
-                extract_names(g.get("developers")),
-                extract_names(g.get("publishers")),
-                extract_names(g.get("genres")),
-                extract_names(g.get("tags")),
-                json.dumps(g.get("esrb_rating")) if g.get("esrb_rating") else None,
-                clean_text(g.get("website")),
-                clean_int(g.get("screenshots_count")),
-                clean_int(g.get("achievements_count")),
-                clean_int(g.get("game_series_count")),
-                clean_int(g.get("additions_count")),
-                clean_int(g.get("parents_count")),
-                extract_names(g.get("alternative_names")),
-                g.get("rating") or 0.0,
-                clean_int(g.get("ratings_count")),
-                clean_int(g.get("metacritic")),
-            ))
+            game_rows.append(build_game_row(g))
 
             old_desc = old_descriptions.get(gid)
             new_desc = clean_text(g.get("description_raw"))
@@ -517,6 +492,64 @@ def refresh_games(conn, game_ids):
         logger.info("Updated chunk %d: %d games, %d re-embedded", i // CHUNK_SIZE + 1, len(chunk_ids), len(re_embed_ids))
 
     return faiss_ids, faiss_vectors
+
+# ============================================================
+# -------------------- ONE-OFF BACKFILL ----------------------
+# ============================================================
+
+# Games whose RAWG data changes most: not out yet, or out in the last N days.
+BACKFILL_RECENT_DAYS = 180
+
+
+def backfill_recent_games(game_ids=None) -> dict:
+    """Re-fetch games that went stale while Pass 2 was filtering on release
+    date instead of update date (see fetch_updated_game_ids).
+
+    game_ids: refresh just these (e.g. one game to check first); by default,
+    every game releasing in the future or in the last BACKFILL_RECENT_DAYS.
+    Takes the pipeline lock and finishes like the daily run: FAISS update,
+    pod reload, recommendation cache cleared.
+    """
+    if not _acquire_pipeline_lock():
+        return {"status": "locked"}
+
+    conn = None
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+
+        if game_ids is None:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT id FROM games
+                    WHERE released > CURRENT_DATE - %s
+                    ORDER BY released DESC, id
+                    """,
+                    [BACKFILL_RECENT_DAYS]
+                )
+                game_ids = [row[0] for row in cur.fetchall()]
+
+        game_ids = [int(g) for g in game_ids]
+        logger.info("Backfill: refreshing %d games", len(game_ids))
+
+        ids, vectors = refresh_games(conn, game_ids)
+
+        if ids:
+            append_and_persist(ids, vectors)
+            _reload_all_pods()
+
+        try:
+            clear_recommendation_cache()
+        except Exception:
+            logger.exception("Cache clear failed")
+
+        logger.info("Backfill completed: %d games, %d re-embedded", len(game_ids), len(ids))
+        return {"status": "done", "games": len(game_ids), "re_embedded": len(ids)}
+    finally:
+        if conn:
+            conn.close()
+        if LOCK_FILE_PATH.exists():
+            remove_lock_file("Failed to remove pipeline lock")
 
 # ============================================================
 # --------------------- REMOVE LOCK FILE ---------------------
@@ -652,34 +685,7 @@ def run_daily_pipeline():
                 for gid in chunk_ids:
                     g = games[gid]
 
-                    game_rows.append((
-                        clean_int(g.get("id")),
-                        clean_text(g.get("slug")),
-                        clean_text(g.get("name")),
-                        clean_text(g.get("name_original")),
-                        clean_text(g.get("description")),
-                        clean_text(g.get("description_raw")),
-                        clean_text(g.get("released")),
-                        clean_text(g.get("background_image")),
-                        clean_text(g.get("background_image_additional")),
-                        clean_int(g.get("suggestions_count")),
-                        extract_platforms(g.get("platforms")),
-                        extract_names(g.get("developers")),
-                        extract_names(g.get("publishers")),
-                        extract_names(g.get("genres")),
-                        extract_names(g.get("tags")),
-                        json.dumps(g.get("esrb_rating")) if g.get("esrb_rating") else None,
-                        clean_text(g.get("website")),
-                        clean_int(g.get("screenshots_count")),
-                        clean_int(g.get("achievements_count")),
-                        clean_int(g.get("game_series_count")),
-                        clean_int(g.get("additions_count")),
-                        clean_int(g.get("parents_count")),
-                        extract_names(g.get("alternative_names")),
-                        g.get("rating") or 0.0,
-                        clean_int(g.get("ratings_count")),
-                        clean_int(g.get("metacritic")),
-                    ))
+                    game_rows.append(build_game_row(g))
 
                     texts.append(build_structured_text(g))
                     chunk_game_ids.append(gid)
@@ -752,63 +758,6 @@ def run_daily_pipeline():
         if conn:
             conn.close()
         if lock_acquired and LOCK_FILE_PATH.exists():
-            remove_lock_file("Failed to remove pipeline lock")
-# ============================================================
-# -------------------- ONE-OFF BACKFILL ----------------------
-# ============================================================
-
-# Games whose RAWG data changes most: not out yet, or out in the last N days.
-BACKFILL_RECENT_DAYS = 180
-
-
-def backfill_recent_games(game_ids=None) -> dict:
-    """Re-fetch games that went stale while Pass 2 was filtering on release
-    date instead of update date (see fetch_updated_game_ids).
-
-    game_ids: refresh just these (e.g. one game to check first); by default,
-    every game releasing in the future or in the last BACKFILL_RECENT_DAYS.
-    Takes the pipeline lock and finishes like the daily run: FAISS update,
-    pod reload, recommendation cache cleared.
-    """
-    if not _acquire_pipeline_lock():
-        return {"status": "locked"}
-
-    conn = None
-    try:
-        conn = psycopg2.connect(**DB_CONFIG)
-
-        if game_ids is None:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    SELECT id FROM games
-                    WHERE released > CURRENT_DATE - %s
-                    ORDER BY released DESC, id
-                    """,
-                    [BACKFILL_RECENT_DAYS]
-                )
-                game_ids = [row[0] for row in cur.fetchall()]
-
-        game_ids = [int(g) for g in game_ids]
-        logger.info("Backfill: refreshing %d games", len(game_ids))
-
-        ids, vectors = refresh_games(conn, game_ids)
-
-        if ids:
-            append_and_persist(ids, vectors)
-            _reload_all_pods()
-
-        try:
-            clear_recommendation_cache()
-        except Exception:
-            logger.exception("Cache clear failed")
-
-        logger.info("Backfill completed: %d games, %d re-embedded", len(game_ids), len(ids))
-        return {"status": "done", "games": len(game_ids), "re_embedded": len(ids)}
-    finally:
-        if conn:
-            conn.close()
-        if LOCK_FILE_PATH.exists():
             remove_lock_file("Failed to remove pipeline lock")
 
 # ============================================================

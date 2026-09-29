@@ -53,7 +53,7 @@ def test_recommend_three_games(mock_rec):
 def test_recommend_empty_input(mock_rec):
     response = client.post("/recommend", json={"rawg_ids": []})
     assert response.status_code == 200
-    assert response.json() == {"rawg_ids": []}
+    assert response.json() == {"rawg_ids": [], "scores": None}
 
 
 @patch("recommender.api.get_recommendations", return_value=_mock_return)

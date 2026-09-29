@@ -16,6 +16,13 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
 HF_TOKEN = os.getenv("HF_TOKEN")
 
+HF_TOKENS = [
+    v for k in [
+        "HF_TOKEN", *(f"HF_TOKEN_{i}" for i in range(1, 7))
+    ]
+    if (v := os.getenv(k))
+]
+
 BASE_DIR      = Path(__file__).resolve().parent
 ARTIFACTS_DIR = BASE_DIR / "artifacts"
 

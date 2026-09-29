@@ -3,6 +3,8 @@ name: Deploy to Oracle K8s
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '**/*.md'
 
 env:
   REGISTRY: ghcr.io
@@ -165,7 +167,27 @@ jobs:
               --from-literal=RAWG_API_KEY_14='${{ secrets.GAMIQ_RAWG_API_KEY_14 }}' \
               --from-literal=RAWG_API_KEY_15='${{ secrets.GAMIQ_RAWG_API_KEY_15 }}' \
               --from-literal=PIPELINE_API_KEY='${{ secrets.PIPELINE_API_KEY }}' \
-              --from-literal=HF_TOKEN='${{ secrets.GAMIQ_HF_TOKEN }}'
+              --from-literal=HF_TOKEN='${{ secrets.GAMIQ_HF_TOKEN }}' \
+              --from-literal=HF_TOKEN_1='${{ secrets.GAMIQ_HF_TOKEN_1 }}' \
+              --from-literal=HF_TOKEN_2='${{ secrets.GAMIQ_HF_TOKEN_2 }}' \
+              --from-literal=HF_TOKEN_3='${{ secrets.GAMIQ_HF_TOKEN_3 }}' \
+              --from-literal=HF_TOKEN_4='${{ secrets.GAMIQ_HF_TOKEN_4 }}' \
+              --from-literal=HF_TOKEN_5='${{ secrets.GAMIQ_HF_TOKEN_5 }}' \
+              --from-literal=HF_TOKEN_6='${{ secrets.GAMIQ_HF_TOKEN_6 }}' \
+              --from-literal=LLM_API_KEY='${{ secrets.GAMIQ_LLM_API_KEY }}' \
+              --from-literal=LLM_API_KEY_1='${{ secrets.GAMIQ_LLM_API_KEY_1 }}' \
+              --from-literal=LLM_API_KEY_2='${{ secrets.GAMIQ_LLM_API_KEY_2 }}' \
+              --from-literal=LLM_API_KEY_3='${{ secrets.GAMIQ_LLM_API_KEY_3 }}' \
+              --from-literal=LLM_API_KEY_4='${{ secrets.GAMIQ_LLM_API_KEY_4 }}' \
+              --from-literal=LLM_API_KEY_5='${{ secrets.GAMIQ_LLM_API_KEY_5 }}' \
+              --from-literal=LLM_API_KEY_6='${{ secrets.GAMIQ_LLM_API_KEY_6 }}' \
+              --from-literal=LLM_API_KEY_7='${{ secrets.GAMIQ_LLM_API_KEY_7 }}' \
+              --from-literal=LLM_API_KEY_8='${{ secrets.GAMIQ_LLM_API_KEY_8 }}' \
+              --from-literal=LLM_BASE_URL='${{ secrets.GAMIQ_LLM_BASE_URL }}' \
+              --from-literal=LLM_MODEL='${{ secrets.GAMIQ_LLM_MODEL }}' \
+              --from-literal=LLM_FALLBACK_API_KEY='${{ secrets.GAMIQ_LLM_FALLBACK_API_KEY }}' \
+              --from-literal=LLM_FALLBACK_BASE_URL='${{ secrets.GAMIQ_LLM_FALLBACK_BASE_URL }}' \
+              --from-literal=LLM_FALLBACK_MODEL='${{ secrets.GAMIQ_LLM_FALLBACK_MODEL }}'
 
             # Recreate monitoring secrets
             kubectl delete secret monitoring-secrets -n monitoring --ignore-not-found
