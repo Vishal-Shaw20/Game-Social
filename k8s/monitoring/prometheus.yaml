@@ -30,6 +30,21 @@ data:
       - job_name: "kube-state-metrics"
         static_configs:
           - targets: ["kube-state-metrics:8080"]
+            
+      - job_name: "kubernetes-cadvisor"
+        scheme: https
+        metrics_path: /metrics/cadvisor
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        kubernetes_sd_configs:
+          - role: node
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_node_address_InternalIP]
+            target_label: __address__
+            replacement: "${1}:10250"
+          - source_labels: [__meta_kubernetes_node_name]
+            target_label: node
 
   alerts.yml: |
     groups:
@@ -125,6 +140,7 @@ spec:
       labels:
         app: prometheus
     spec:
+      serviceAccountName: prometheus
       securityContext:
         runAsUser: 65534
         fsGroup: 65534
