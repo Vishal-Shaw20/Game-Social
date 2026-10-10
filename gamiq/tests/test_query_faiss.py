@@ -76,7 +76,7 @@ def test_scoring_dynamic_formula():
     meta_norm = 80 / 100
     count_score = min(math.log10(1001) / math.log10(1_000_000), 1.0)
 
-    w = compute_dynamic_weights(faiss_score, tag_overlap, genre_overlap, dev_match)
+    w = compute_dynamic_weights(faiss_score, tag_overlap, genre_overlap)
     expected = (
         w["faiss"] * faiss_score
         + w["tag_overlap"] * tag_overlap
@@ -160,19 +160,19 @@ def test_non_series_without_faiss_gets_zero():
 # -------------------- Dynamic Weights --------------------
 
 def test_high_faiss_increases_faiss_weight():
-    w_high = compute_dynamic_weights(0.9, 0.0, 0.0, 0.0)
-    w_low = compute_dynamic_weights(0.2, 0.0, 0.0, 0.0)
+    w_high = compute_dynamic_weights(0.9, 0.0, 0.0)
+    w_low = compute_dynamic_weights(0.2, 0.0, 0.0)
     assert w_high["faiss"] > w_low["faiss"]
 
 
 def test_developer_publisher_always_zero():
-    w = compute_dynamic_weights(0.5, 0.5, 0.5, 1.0)
+    w = compute_dynamic_weights(0.5, 0.5, 0.5)
     assert w["developer"] == 0.0
     assert w["publisher"] == 0.0
 
 
 def test_weights_sum_to_one():
-    w = compute_dynamic_weights(0.7, 0.4, 0.6, 1.0)
+    w = compute_dynamic_weights(0.7, 0.4, 0.6)
     relevance_keys = ["faiss", "tag_overlap", "genre", "rating", "metacritic", "popularity"]
     total = sum(w[k] for k in relevance_keys)
     assert abs(total - 1.0) < 1e-9

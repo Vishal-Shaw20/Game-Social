@@ -14,8 +14,6 @@ DB_CONFIG = {
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
-HF_TOKEN = os.getenv("HF_TOKEN")
-
 HF_TOKENS = [
     v for k in [
         "HF_TOKEN", *(f"HF_TOKEN_{i}" for i in range(1, 7))

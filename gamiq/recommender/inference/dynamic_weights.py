@@ -70,7 +70,6 @@ def compute_dynamic_weights(
         faiss_score,
         tag_overlap,
         genre_overlap,
-        dev_match
 ):
     """
     Compute per-candidate adaptive weights.
@@ -86,9 +85,6 @@ def compute_dynamic_weights(
     Developer and publisher are deliberately excluded from the
     relevance score because matching a developer or publisher should
     not make a game more similar to the query.
-
-    dev_match remains in the function signature for compatibility
-    with the existing query_faiss_dynamic_weight.py file.
     """
 
     w = dict(BASE_WEIGHTS)
@@ -282,7 +278,6 @@ def score_candidates_dynamic(
             faiss_score,
             tag_overlap,
             genre_overlap,
-            dev_match
         )
 
         # -----------------------------------------------------
