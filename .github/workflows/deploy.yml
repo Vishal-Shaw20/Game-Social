@@ -187,7 +187,8 @@ jobs:
               --from-literal=LLM_MODEL='${{ secrets.GAMIQ_LLM_MODEL }}' \
               --from-literal=LLM_FALLBACK_API_KEY='${{ secrets.GAMIQ_LLM_FALLBACK_API_KEY }}' \
               --from-literal=LLM_FALLBACK_BASE_URL='${{ secrets.GAMIQ_LLM_FALLBACK_BASE_URL }}' \
-              --from-literal=LLM_FALLBACK_MODEL='${{ secrets.GAMIQ_LLM_FALLBACK_MODEL }}'
+              --from-literal=LLM_FALLBACK_MODEL='${{ secrets.GAMIQ_LLM_FALLBACK_MODEL }}' \
+              --from-literal=EMBED_API_KEY='${{ secrets.GAMIQ_EMBED_API_KEY }}'
 
             # Recreate monitoring secrets
             kubectl delete secret monitoring-secrets -n monitoring --ignore-not-found
