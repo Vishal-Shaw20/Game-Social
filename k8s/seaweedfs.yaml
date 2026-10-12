@@ -1,6 +1,6 @@
 # SeaweedFS 4.48 for GameSocial.
 # These hostPath PV capacities are Kubernetes scheduling declarations, NOT hard disk quotas.
-# The single volume server is capped at one volume of 27,000 MB, and marks its volume read-only
+# The single volume server is capped at two volumes of 27,000 MB each, and marks its volume read-only
 # if free filesystem space drops below 15 GiB. The node is a single point of failure; back up off-host.
 ---
 apiVersion: v1
@@ -257,7 +257,7 @@ spec:
             - -ip.bind=0.0.0.0
             - -port=8080
             - -port.grpc=18080
-            - -max=1
+            - -max=2
             - -minFreeSpace=15GiB
             - -index=leveldb
           ports:
