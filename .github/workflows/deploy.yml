@@ -283,6 +283,21 @@ jobs:
             kubectl apply -f ~/gamesocial/k8s/ || exit 1
             kubectl apply -f ~/gamesocial/k8s/monitoring/ || exit 1
             
+            # Restart Prometheus only when its config or alert rules change.
+            PROMETHEUS_CONFIG_SHA="$(kubectl get configmap prometheus-config -n monitoring \
+              -o jsonpath='{.data.prometheus\.yml}{.data.alerts\.yml}' \
+              | sha256sum | awk '{print $1}')" || exit 1
+            
+            CURRENT_PROMETHEUS_CONFIG_SHA="$(kubectl get deployment prometheus -n monitoring \
+              -o jsonpath='{.spec.template.metadata.annotations.prometheus-config-sha256}' \
+              2>/dev/null || true)"
+            
+            if [ "$PROMETHEUS_CONFIG_SHA" != "$CURRENT_PROMETHEUS_CONFIG_SHA" ]; then
+              kubectl patch deployment prometheus -n monitoring --type=merge \
+                -p "{\"spec\":{\"template\":{\"metadata\":{\"annotations\":{\"prometheus-config-sha256\":\"$PROMETHEUS_CONFIG_SHA\"}}}}}" || exit 1
+              kubectl rollout status deployment prometheus -n monitoring --timeout=180s || exit 1
+            fi
+            
             # Restart Alertmanager only when its configuration changes.
             ALERTMANAGER_CONFIG_B64="$(kubectl get secret alertmanager-config -n monitoring -o jsonpath='{.data.alertmanager\.yml}')" || exit 1
             ALERTMANAGER_CONFIG_SHA="$(printf '%s' "$ALERTMANAGER_CONFIG_B64" | sha256sum | awk '{print $1}')" || exit 1

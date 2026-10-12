@@ -60,7 +60,7 @@ data:
               description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} has restarted more than once in 5 minutes."
 
           - alert: PodNotReady
-            expr: kube_pod_status_ready{namespace="gamesocial", condition="true"} == 0
+            expr: (kube_pod_status_ready{namespace="gamesocial", condition="true"} == 0) and on(namespace, pod) (kube_pod_status_phase{namespace="gamesocial", phase=~"Pending|Running"} == 1)
             for: 5m
             labels:
               severity: warning
