@@ -118,12 +118,71 @@ jobs:
           key: ${{ secrets.OCI_SSH_KEY }}
           command_timeout: 20m
           script: |
+            set -euo pipefail
+            
             # Create namespaces if they don't exist
             kubectl create namespace gamesocial --dry-run=client -o yaml | kubectl apply -f -
             kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
 
-            # Recreate backend secrets from GitHub Secrets
-            kubectl delete secret backend-secrets -n gamesocial --ignore-not-found
+            # Provision SeaweedFS S3 credentials from GitHub Actions Secrets.
+            SEAWEEDFS_S3_ADMIN_ACCESS_KEY='${{ secrets.SEAWEEDFS_S3_ADMIN_ACCESS_KEY }}'
+            SEAWEEDFS_S3_ADMIN_SECRET_KEY='${{ secrets.SEAWEEDFS_S3_ADMIN_SECRET_KEY }}'
+            SEAWEEDFS_S3_ACCESS_KEY='${{ secrets.SEAWEEDFS_S3_ACCESS_KEY }}'
+            SEAWEEDFS_S3_SECRET_KEY='${{ secrets.SEAWEEDFS_S3_SECRET_KEY }}'
+
+            if [ -z "$SEAWEEDFS_S3_ADMIN_ACCESS_KEY" ] || \
+               [ -z "$SEAWEEDFS_S3_ADMIN_SECRET_KEY" ] || \
+               [ -z "$SEAWEEDFS_S3_ACCESS_KEY" ] || \
+               [ -z "$SEAWEEDFS_S3_SECRET_KEY" ]; then
+              echo "Missing required SeaweedFS Actions secrets; not deploying." >&2
+              exit 1
+            fi
+            export SEAWEEDFS_S3_ADMIN_ACCESS_KEY SEAWEEDFS_S3_ADMIN_SECRET_KEY
+            export SEAWEEDFS_S3_ACCESS_KEY SEAWEEDFS_S3_SECRET_KEY
+
+            SEAWEEDFS_S3_CONFIG="$(mktemp)"
+            trap 'rm -f "$SEAWEEDFS_S3_CONFIG"' EXIT
+            python3 - <<'PY' > "$SEAWEEDFS_S3_CONFIG"
+            import json
+            import os
+
+            config = {
+                "identities": [
+                    {
+                        "name": "gamesocial-bootstrap-admin",
+                        "credentials": [{
+                            "accessKey": os.environ["SEAWEEDFS_S3_ADMIN_ACCESS_KEY"],
+                            "secretKey": os.environ["SEAWEEDFS_S3_ADMIN_SECRET_KEY"],
+                        }],
+                        "actions": ["Admin", "Read", "List", "Tagging", "Write"],
+                    },
+                    {
+                        "name": "gamesocial-backend",
+                        "credentials": [{
+                            "accessKey": os.environ["SEAWEEDFS_S3_ACCESS_KEY"],
+                            "secretKey": os.environ["SEAWEEDFS_S3_SECRET_KEY"],
+                        }],
+                        "actions": [
+                            "Read:gamesocial-media",
+                            "List:gamesocial-media",
+                            "Tagging:gamesocial-media",
+                            "Write:gamesocial-media",
+                        ],
+                    },
+                ]
+            }
+            print(json.dumps(config, indent=2))
+            PY
+
+            kubectl create secret generic seaweedfs-s3-auth -n gamesocial \
+              --from-file=config.json="$SEAWEEDFS_S3_CONFIG" \
+              --from-literal=admin-access-key="$SEAWEEDFS_S3_ADMIN_ACCESS_KEY" \
+              --from-literal=admin-secret-key="$SEAWEEDFS_S3_ADMIN_SECRET_KEY" \
+              --from-literal=app-access-key="$SEAWEEDFS_S3_ACCESS_KEY" \
+              --from-literal=app-secret-key="$SEAWEEDFS_S3_SECRET_KEY" \
+              --dry-run=client -o yaml | kubectl apply -f - || exit 1
+
+            # Create or update backend secrets from GitHub Secrets
             kubectl create secret generic backend-secrets -n gamesocial \
               --from-literal=MONGO_URI='${{ secrets.BACKEND_MONGO_URI }}' \
               --from-literal=POSTGRES_URI='${{ secrets.BACKEND_POSTGRES_URI }}' \
@@ -140,10 +199,10 @@ jobs:
               --from-literal=PIPELINE_API_KEY='${{ secrets.PIPELINE_API_KEY }}' \
               --from-literal=FRONTEND_URL='${{ secrets.BACKEND_FRONTEND_URL }}' \
               --from-literal=API_BASE_URL='${{ secrets.BACKEND_API_BASE_URL }}' \
-              --from-literal=KEEP_SNAPSHOTS='56'
+              --from-literal=KEEP_SNAPSHOTS='56' \
+              --dry-run=client -o yaml | kubectl apply -f - || exit 1
 
-            # Recreate gamiq secrets from GitHub Secrets
-            kubectl delete secret gamiq-secrets -n gamesocial --ignore-not-found
+            # Create or update gamiq secrets from GitHub Secrets
             kubectl create secret generic gamiq-secrets -n gamesocial \
               --from-literal=DB_HOST='${{ secrets.GAMIQ_DB_HOST }}' \
               --from-literal=DB_PORT='${{ secrets.GAMIQ_DB_PORT }}' \
@@ -188,16 +247,16 @@ jobs:
               --from-literal=LLM_FALLBACK_API_KEY='${{ secrets.GAMIQ_LLM_FALLBACK_API_KEY }}' \
               --from-literal=LLM_FALLBACK_BASE_URL='${{ secrets.GAMIQ_LLM_FALLBACK_BASE_URL }}' \
               --from-literal=LLM_FALLBACK_MODEL='${{ secrets.GAMIQ_LLM_FALLBACK_MODEL }}' \
-              --from-literal=EMBED_API_KEY='${{ secrets.GAMIQ_EMBED_API_KEY }}'
+              --from-literal=EMBED_API_KEY='${{ secrets.GAMIQ_EMBED_API_KEY }}' \
+              --dry-run=client -o yaml | kubectl apply -f - || exit 1
 
-            # Recreate monitoring secrets
-            kubectl delete secret monitoring-secrets -n monitoring --ignore-not-found
+            # Create or update monitoring secrets
             kubectl create secret generic monitoring-secrets -n monitoring \
-              --from-literal=GF_SECURITY_ADMIN_PASSWORD='${{ secrets.GRAFANA_ADMIN_PASSWORD }}'
+              --from-literal=GF_SECURITY_ADMIN_PASSWORD='${{ secrets.GRAFANA_ADMIN_PASSWORD }}' \
+              --dry-run=client -o yaml | kubectl apply -f - || exit 1
 
-            # Recreate alertmanager config with real credentials
-            kubectl delete configmap alertmanager-config -n monitoring --ignore-not-found
-            kubectl create configmap alertmanager-config -n monitoring \
+            # Create or update Alertmanager config as a Secret
+            kubectl create secret generic alertmanager-config -n monitoring \
               --from-literal=alertmanager.yml='
             global:
               smtp_smarthost: "smtp.gmail.com:587"
@@ -216,11 +275,37 @@ jobs:
                 email_configs:
                   - to: "${{ secrets.BACKEND_EMAIL_USER }}"
                     send_resolved: true
-            '
+            ' \
+              --dry-run=client -o yaml | kubectl apply -f - || exit 1
 
             # Apply all manifests
-            kubectl apply -f ~/gamesocial/k8s/
-            kubectl apply -f ~/gamesocial/k8s/monitoring/
+            kubectl delete job seaweedfs-bucket-bootstrap -n gamesocial --ignore-not-found || exit 1
+            kubectl apply -f ~/gamesocial/k8s/ || exit 1
+            kubectl apply -f ~/gamesocial/k8s/monitoring/ || exit 1
+            
+            # Restart Alertmanager only when its configuration changes.
+            ALERTMANAGER_CONFIG_B64="$(kubectl get secret alertmanager-config -n monitoring -o jsonpath='{.data.alertmanager\.yml}')" || exit 1
+            ALERTMANAGER_CONFIG_SHA="$(printf '%s' "$ALERTMANAGER_CONFIG_B64" | sha256sum | awk '{print $1}')" || exit 1
+            kubectl patch deployment alertmanager -n monitoring --type=merge \
+              -p "{\"spec\":{\"template\":{\"metadata\":{\"annotations\":{\"alertmanager-config-sha256\":\"$ALERTMANAGER_CONFIG_SHA\"}}}}}" || exit 1
+            
+            # Wait until Alertmanager has loaded the Secret-backed configuration.
+            kubectl rollout status deployment alertmanager -n monitoring --timeout=180s || exit 1
+
+            # Remove the old ConfigMap after the new Deployment is ready.
+            kubectl delete configmap alertmanager-config -n monitoring --ignore-not-found || exit 1
+            
+            # Restart S3 gateway if its configuration changes.
+            S3_CONFIG_B64="$(kubectl get secret seaweedfs-s3-auth -n gamesocial -o jsonpath='{.data.config\.json}')" || exit 1
+            S3_CONFIG_SHA="$(printf '%s' "$S3_CONFIG_B64" | sha256sum | awk '{print $1}')" || exit 1
+            kubectl patch deployment seaweedfs-s3 -n gamesocial --type=merge \
+              -p "{\"spec\":{\"template\":{\"metadata\":{\"annotations\":{\"seaweedfs-config-sha256\":\"$S3_CONFIG_SHA\"}}}}}" || exit 1
+
+            kubectl rollout status deployment seaweedfs-master -n gamesocial --timeout=180s || exit 1
+            kubectl rollout status deployment seaweedfs-volume -n gamesocial --timeout=180s || exit 1
+            kubectl rollout status deployment seaweedfs-filer -n gamesocial --timeout=180s || exit 1
+            kubectl rollout status deployment seaweedfs-s3 -n gamesocial --timeout=180s || exit 1
+            kubectl wait --for=condition=complete job/seaweedfs-bucket-bootstrap -n gamesocial --timeout=300s || exit 1
 
             # Rolling restart to pull new images
             kubectl rollout restart deployment frontend -n gamesocial
@@ -228,9 +313,9 @@ jobs:
             kubectl rollout restart deployment gamiq -n gamesocial
 
             # Wait for rollouts to complete
-            kubectl rollout status deployment frontend -n gamesocial --timeout=300s
-            kubectl rollout status deployment backend -n gamesocial --timeout=300s
-            kubectl rollout status deployment gamiq -n gamesocial --timeout=300s
+            kubectl rollout status deployment frontend -n gamesocial --timeout=300s || exit 1
+            kubectl rollout status deployment backend -n gamesocial --timeout=300s || exit 1
+            kubectl rollout status deployment gamiq -n gamesocial --timeout=300s || exit 1
             
             # Prune dangling container images to prevent disk bloat
             sudo crictl rmi $(sudo crictl images -q --filter dangling=true) || true

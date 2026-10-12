@@ -16,11 +16,28 @@ spec:
     spec:
       containers:
         - name: alertmanager
-          image: prom/alertmanager:latest
+          image: prom/alertmanager:v0.34.1
           args:
             - "--config.file=/etc/alertmanager/alertmanager.yml"
           ports:
-            - containerPort: 9093
+            - name: http
+              containerPort: 9093
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
           volumeMounts:
             - name: config
               mountPath: /etc/alertmanager/alertmanager.yml
@@ -34,8 +51,8 @@ spec:
               cpu: "50m"
       volumes:
         - name: config
-          configMap:
-            name: alertmanager-config
+          secret:
+            secretName: alertmanager-config
 ---
 apiVersion: v1
 kind: Service

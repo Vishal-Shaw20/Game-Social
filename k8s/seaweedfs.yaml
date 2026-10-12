@@ -1,0 +1,538 @@
+# SeaweedFS 4.48 for GameSocial.
+# These hostPath PV capacities are Kubernetes scheduling declarations, NOT hard disk quotas.
+# The single volume server is capped at one volume of 27,000 MB, and marks its volume read-only
+# if free filesystem space drops below 15 GiB. The node is a single point of failure; back up off-host.
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: seaweedfs-master-pv
+spec:
+  capacity:
+    storage: 1Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: seaweedfs-manual
+  hostPath:
+    path: /data/seaweedfs/master
+    type: Directory
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - gamesocial
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: seaweedfs-master-pvc
+  namespace: gamesocial
+spec:
+  volumeName: seaweedfs-master-pv
+  accessModes:
+    - ReadWriteOnce
+  volumeMode: Filesystem
+  storageClassName: seaweedfs-manual
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: seaweedfs-volume-pv
+spec:
+  capacity:
+    storage: 30Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: seaweedfs-manual
+  hostPath:
+    path: /data/seaweedfs/volume
+    type: Directory
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - gamesocial
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: seaweedfs-volume-pvc
+  namespace: gamesocial
+spec:
+  volumeName: seaweedfs-volume-pv
+  accessModes:
+    - ReadWriteOnce
+  volumeMode: Filesystem
+  storageClassName: seaweedfs-manual
+  resources:
+    requests:
+      storage: 30Gi
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: seaweedfs-filer-pv
+spec:
+  capacity:
+    storage: 1Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: seaweedfs-manual
+  hostPath:
+    path: /data/seaweedfs/filer
+    type: Directory
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - gamesocial
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: seaweedfs-filer-pvc
+  namespace: gamesocial
+spec:
+  volumeName: seaweedfs-filer-pv
+  accessModes:
+    - ReadWriteOnce
+  volumeMode: Filesystem
+  storageClassName: seaweedfs-manual
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: seaweedfs-master
+  namespace: gamesocial
+spec:
+  type: ClusterIP
+  selector:
+    app: seaweedfs-master
+  ports:
+    - name: http
+      port: 9333
+      targetPort: 9333
+    - name: grpc
+      port: 19333
+      targetPort: 19333
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: seaweedfs-master
+  namespace: gamesocial
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: seaweedfs-master
+  template:
+    metadata:
+      labels:
+        app: seaweedfs-master
+    spec:
+      automountServiceAccountToken: false
+      nodeSelector:
+        kubernetes.io/hostname: gamesocial
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: master
+          image: chrislusf/seaweedfs:4.48
+          imagePullPolicy: IfNotPresent
+          args:
+            - master
+            - -mdir=/data
+            - -peers=none
+            - -ip.bind=0.0.0.0
+            - -port=9333
+            - -port.grpc=19333
+            - -volumeSizeLimitMB=27000
+            - -volumePreallocate=false
+            - -telemetry=false
+          ports:
+            - name: http
+              containerPort: 9333
+            - name: grpc
+              containerPort: 19333
+          resources:
+            requests:
+              cpu: 25m
+              memory: 96Mi
+            limits:
+              cpu: 100m
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 2
+            failureThreshold: 3
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: seaweedfs-master-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: seaweedfs-volume
+  namespace: gamesocial
+spec:
+  type: ClusterIP
+  selector:
+    app: seaweedfs-volume
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+    - name: grpc
+      port: 18080
+      targetPort: 18080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: seaweedfs-volume
+  namespace: gamesocial
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: seaweedfs-volume
+  template:
+    metadata:
+      labels:
+        app: seaweedfs-volume
+    spec:
+      automountServiceAccountToken: false
+      nodeSelector:
+        kubernetes.io/hostname: gamesocial
+      terminationGracePeriodSeconds: 45
+      containers:
+        - name: volume
+          image: chrislusf/seaweedfs:4.48
+          imagePullPolicy: IfNotPresent
+          args:
+            - volume
+            - -dir=/data
+            - -master=seaweedfs-master:9333
+            - -ip.bind=0.0.0.0
+            - -port=8080
+            - -port.grpc=18080
+            - -max=1
+            - -minFreeSpace=15GiB
+            - -index=leveldb
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: grpc
+              containerPort: 18080
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            limits:
+              cpu: 200m
+              memory: 768Mi
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 45
+            periodSeconds: 20
+            timeoutSeconds: 2
+            failureThreshold: 3
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: seaweedfs-volume-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: seaweedfs-filer
+  namespace: gamesocial
+spec:
+  type: ClusterIP
+  selector:
+    app: seaweedfs-filer
+  ports:
+    - name: http
+      port: 8888
+      targetPort: 8888
+    - name: grpc
+      port: 18888
+      targetPort: 18888
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: seaweedfs-filer
+  namespace: gamesocial
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: seaweedfs-filer
+  template:
+    metadata:
+      labels:
+        app: seaweedfs-filer
+    spec:
+      automountServiceAccountToken: false
+      nodeSelector:
+        kubernetes.io/hostname: gamesocial
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: filer
+          image: chrislusf/seaweedfs:4.48
+          imagePullPolicy: IfNotPresent
+          args:
+            - filer
+            - -master=seaweedfs-master:9333
+            - -ip.bind=0.0.0.0
+            - -port=8888
+            - -port.grpc=18888
+            - -defaultStoreDir=/data
+          ports:
+            - name: http
+              containerPort: 8888
+            - name: grpc
+              containerPort: 18888
+          resources:
+            requests:
+              cpu: 25m
+              memory: 128Mi
+            limits:
+              cpu: 100m
+              memory: 384Mi
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 45
+            periodSeconds: 20
+            timeoutSeconds: 2
+            failureThreshold: 3
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: seaweedfs-filer-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: seaweedfs-s3
+  namespace: gamesocial
+spec:
+  type: ClusterIP
+  selector:
+    app: seaweedfs-s3
+  ports:
+    - name: s3
+      port: 8333
+      targetPort: 8333
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: seaweedfs-s3
+  namespace: gamesocial
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: seaweedfs-s3
+  template:
+    metadata:
+      labels:
+        app: seaweedfs-s3
+    spec:
+      automountServiceAccountToken: false
+      nodeSelector:
+        kubernetes.io/hostname: gamesocial
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: s3
+          image: chrislusf/seaweedfs:4.48
+          imagePullPolicy: IfNotPresent
+          args:
+            - s3
+            - -filer=seaweedfs-filer:8888
+            - -ip.bind=0.0.0.0
+            - -port=8333
+            - -config=/etc/seaweedfs/config.json
+          ports:
+            - name: s3
+              containerPort: 8333
+          resources:
+            requests:
+              cpu: 25m
+              memory: 128Mi
+            limits:
+              cpu: 100m
+              memory: 384Mi
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: s3
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: s3
+            initialDelaySeconds: 45
+            periodSeconds: 20
+            timeoutSeconds: 2
+            failureThreshold: 3
+          volumeMounts:
+            - name: s3-config
+              mountPath: /etc/seaweedfs
+              readOnly: true
+      volumes:
+        - name: s3-config
+          secret:
+            secretName: seaweedfs-s3-auth
+            items:
+              - key: config.json
+                path: config.json
+---
+# One-time bucket bootstrap. The Job reads the admin keys from dedicated Secret fields.
+# The S3 gateway's config.json contains both identities, so the gateway can access the admin credentials.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: seaweedfs-bucket-bootstrap
+  namespace: gamesocial
+spec:
+  backoffLimit: 6
+  activeDeadlineSeconds: 600
+  template:
+    metadata:
+      labels:
+        app: seaweedfs-bucket-bootstrap
+    spec:
+      restartPolicy: OnFailure
+      automountServiceAccountToken: false
+      nodeSelector:
+        kubernetes.io/hostname: gamesocial
+      containers:
+        - name: create-bucket
+          image: public.ecr.aws/aws-cli/aws-cli:2.27.41
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -ec
+          args:
+            - |
+              export AWS_ACCESS_KEY_ID="$(cat /var/run/seaweedfs/admin-access-key)"
+              export AWS_SECRET_ACCESS_KEY="$(cat /var/run/seaweedfs/admin-secret-key)"
+              export AWS_DEFAULT_REGION=us-east-1
+              export AWS_EC2_METADATA_DISABLED=true
+              endpoint="http://seaweedfs-s3:8333"
+              aws configure set default.s3.addressing_style path
+
+              attempt=0
+              until aws --endpoint-url "$endpoint" s3api list-buckets >/dev/null 2>&1; do
+                attempt=$((attempt + 1))
+                if [ "$attempt" -ge 60 ]; then
+                  echo "SeaweedFS S3 endpoint did not become ready in time." >&2
+                  exit 1
+                fi
+                sleep 2
+              done
+
+              if ! aws --endpoint-url "$endpoint" s3api head-bucket --bucket gamesocial-media >/dev/null 2>&1; then
+                aws --endpoint-url "$endpoint" s3api create-bucket --bucket gamesocial-media
+              fi
+              echo "Bucket gamesocial-media is ready."
+          env:
+            - name: AWS_CONFIG_FILE
+              value: /tmp/aws-config
+          volumeMounts:
+            - name: admin-credentials
+              mountPath: /var/run/seaweedfs
+              readOnly: true
+          resources:
+            requests:
+              cpu: 10m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 256Mi
+      volumes:
+        - name: admin-credentials
+          secret:
+            secretName: seaweedfs-s3-auth
+            items:
+              - key: admin-access-key
+                path: admin-access-key
+              - key: admin-secret-key
+                path: admin-secret-key
