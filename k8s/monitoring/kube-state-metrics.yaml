@@ -12,33 +12,11 @@ metadata:
 rules:
   - apiGroups: [""]
     resources:
-      - nodes
       - pods
-      - services
-      - endpoints
-      - persistentvolumeclaims
-      - configmaps
-      - secrets
-      - namespaces
-      - resourcequotas
-      - replicationcontrollers
-      - limitranges
     verbs: ["list", "watch"]
   - apiGroups: ["apps"]
     resources:
       - deployments
-      - daemonsets
-      - replicasets
-      - statefulsets
-    verbs: ["list", "watch"]
-  - apiGroups: ["batch"]
-    resources:
-      - jobs
-      - cronjobs
-    verbs: ["list", "watch"]
-  - apiGroups: ["networking.k8s.io"]
-    resources:
-      - ingresses
     verbs: ["list", "watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -73,6 +51,8 @@ spec:
       containers:
         - name: kube-state-metrics
           image: registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.14.0
+          args:
+            - "--resources=pods,deployments"
           ports:
             - containerPort: 8080
               name: metrics
